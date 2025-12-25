@@ -1,0 +1,3369 @@
+# VERTEX OS BACKEND - COMPLETE SPECIFICATION
+
+> **Purpose:** This is the engine that powers Red Shirt Club. Every frontend (customer site, cleaner app, admin CRM) connects to this single backend via APIs.
+> 
+> **Template:** Admin CRM uses `arhamkhnz/next-shadcn-admin-dashboard` as foundation
+> 
+> **Tech Stack:** Next.js 16, TypeScript, PostgreSQL, Prisma, Stripe
+>
+> **Last Updated:** December 23, 2024
+
+---
+
+# TABLE OF CONTENTS
+
+1. [Foundation Principles](#part-1-foundation-principles)
+2. [Database Schema](#part-2-database-schema)
+3. [Core Services](#part-3-core-services)
+4. [API Contract](#part-4-api-contract)
+5. [Admin CRM Screens](#part-5-admin-crm-screens)
+6. [Build Sequence](#part-6-build-sequence)
+
+---
+
+# PART 1: FOUNDATION PRINCIPLES
+
+These are the architectural rules. Every decision flows from these.
+
+## 1.1 SNAPSHOT VS REFERENCE
+
+```
+PRINCIPLE: Jobs store COPIES, not links
+
+When a job is created:
+- Copy the checklist tasks INTO the job record
+- Copy the cleaner's rate INTO the job record
+- Copy the platform fee INTO the job record
+
+Why:
+- Customer edits their master checklist → doesn't affect scheduled jobs
+- Cleaner changes their rate → doesn't affect booked jobs
+- You change platform fee → doesn't affect existing jobs
+
+The job record is a CONTRACT. It captures what was agreed at booking time.
+```
+
+## 1.2 LEAD → MEMBER CONVERSION
+
+```
+PRINCIPLE: Two-stage customer creation
+
+LEAD (created at data capture):
+- Has email, phone, address
+- Stores assessment progress
+- Can be abandoned and followed up
+- NOT a user account
+
+MEMBER (created at checkout):
+- Converted from Lead
+- Has login credentials
+- Has Stripe customer ID
+- IS a user account
+
+Why:
+- You can follow up on abandoned assessments
+- Clean funnel analytics
+- No orphan accounts from window shoppers
+```
+
+## 1.3 TIER = FEATURES, NOT ACCESS
+
+```
+PRINCIPLE: All customers access all cleaners
+
+FREE TIER:
+- 18% platform fee
+- 72-hour re-clean window
+- Standard support
+- See checklist summary only
+
+ELITE TIER ($149/mo):
+- 13% platform fee
+- 24-hour re-clean window
+- Priority support
+- See full checklist details
+- Concierge booking option
+
+CLEANER TIERS (Rising Star / Established / Top Performer):
+- Trust signals, not access gates
+- Higher tier = higher rates justified
+- Customer chooses any cleaner at any tier
+```
+
+## 1.4 CONFIG-DRIVEN ENGINES
+
+```
+PRINCIPLE: Business logic reads from database, not code
+
+CONFIGURABLE:
+- Task library (what tasks exist per room)
+- Effort modifiers (priority 1.5x, condition multipliers)
+- Platform fees (18%, 13%)
+- Guarantee windows (24hr, 72hr)
+- Tier thresholds (jobs required, rating required)
+
+Why:
+- Change pricing without deploying code
+- Tune algorithms based on real data
+- A/B test different configurations
+```
+
+## 1.5 SUBCONTRACTOR COMPLIANCE
+
+```
+PRINCIPLE: Cleaners are independent contractors, not employees
+
+PLATFORM DEFINES:
+- Scope (what needs to be cleaned - the checklist)
+- Deliverables (verification of completion)
+
+CLEANERS CONTROL:
+- Their rate ($/hr they charge)
+- Their schedule (when they work)
+- Their zones (where they work)
+- Accept/decline jobs (true freedom)
+
+PLATFORM DOES NOT:
+- Dictate HOW to clean (methods)
+- Set their rates
+- Require specific hours
+- Penalize for declining
+
+This maintains legal subcontractor status.
+```
+
+---
+
+# PART 2: DATABASE SCHEMA
+
+## 2.1 ENTITY RELATIONSHIP DIAGRAM
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    LEAD     │────▶│   MEMBER    │────▶│    JOB      │
+│             │     │             │     │             │
+│ assessment  │     │ has one     │     │ snapshots   │
+│ data        │     │ checklist   │     │ checklist   │
+└─────────────┘     └──────┬──────┘     └──────┬──────┘
+                          │                    │
+                          ▼                    │
+                   ┌─────────────┐             │
+                   │  CHECKLIST  │─────────────┘
+                   │             │      (copied, not linked)
+                   │ tasks[]     │
+                   └─────────────┘
+                   
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   CLEANER   │────▶│    JOB      │────▶│   RATING    │
+│             │     │             │     │             │
+│ sets rate   │     │ assigned to │     │ after job   │
+│ sets zones  │     │ one cleaner │     │ verified    │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                          │
+                          ▼
+                   ┌─────────────┐     ┌─────────────┐
+                   │ TRANSACTION │────▶│ PAYOUT_BATCH│
+                   │             │     │             │
+                   │ per job     │     │ weekly      │
+                   └─────────────┘     └─────────────┘
+
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    TASK     │     │   SETTING   │     │    NOTE     │
+│             │     │             │     │             │
+│ library     │     │ config      │     │ internal    │
+│ (editable)  │     │ values      │     │ annotations │
+└─────────────┘     └─────────────┘     └─────────────┘
+
+┌─────────────┐
+│    ZONE     │
+│             │
+│ service     │
+│ areas       │
+└─────────────┘
+```
+
+## 2.2 ENTITY DEFINITIONS
+
+### LEAD
+```sql
+CREATE TABLE leads (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Contact Info (captured at data entry)
+  email                   VARCHAR(255) NOT NULL,
+  phone                   VARCHAR(20),
+  address_full            TEXT,
+  address_zip             VARCHAR(10) NOT NULL,
+  
+  -- Assessment Data (JSON for flexibility)
+  rooms                   JSONB,          -- [{type: "kitchen", qty: 1}, ...]
+  priority_zones          JSONB,          -- ["kitchen", "master_bath"]
+  preferences             JSONB,          -- {beds: "hotel-style", ...}
+  exclusions              JSONB,          -- {rooms: ["office"], notes: "..."}
+  current_state           VARCHAR(50),    -- "well-maintained" | "needs-attention" | "needs-reset"
+  service_level           VARCHAR(50),    -- "maintenance" | "refresh" | "detailed"
+  
+  -- Progress Tracking
+  assessment_step         INTEGER DEFAULT 0,
+  
+  -- Funnel Timestamps (for analytics)
+  zip_entered_at          TIMESTAMP WITH TIME ZONE,
+  assessment_started_at   TIMESTAMP WITH TIME ZONE,
+  assessment_completed_at TIMESTAMP WITH TIME ZONE,
+  results_viewed_at       TIMESTAMP WITH TIME ZONE,
+  converted_at            TIMESTAMP WITH TIME ZONE,
+  abandoned_at            TIMESTAMP WITH TIME ZONE,
+  follow_up_sent_at       TIMESTAMP WITH TIME ZONE,
+  
+  -- Generated
+  checklist_id            UUID REFERENCES checklists(id),
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'in_progress', -- in_progress | completed | converted | abandoned
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_leads_email ON leads(email);
+CREATE INDEX idx_leads_zip ON leads(address_zip);
+CREATE INDEX idx_leads_status ON leads(status);
+CREATE INDEX idx_leads_created ON leads(created_at DESC);
+```
+
+### MEMBER
+```sql
+CREATE TABLE members (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Origin
+  lead_id                 UUID REFERENCES leads(id),
+  
+  -- Auth
+  email                   VARCHAR(255) UNIQUE NOT NULL,
+  password_hash           VARCHAR(255) NOT NULL,
+  
+  -- Contact
+  phone                   VARCHAR(20),
+  address_full            TEXT NOT NULL,
+  address_zip             VARCHAR(10) NOT NULL,
+  
+  -- Membership
+  tier                    VARCHAR(20) DEFAULT 'free', -- free | elite
+  
+  -- Stripe
+  stripe_customer_id      VARCHAR(255),
+  stripe_subscription_id  VARCHAR(255),  -- for Elite monthly billing
+  
+  -- Home Profile (copied from lead assessment)
+  sqft                    INTEGER,
+  bedrooms                INTEGER,
+  bathrooms               DECIMAL(3,1),
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'active', -- active | paused | cancelled
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Relationships
+  checklist_id            UUID REFERENCES checklists(id)
+);
+
+CREATE UNIQUE INDEX idx_members_email ON members(email);
+CREATE INDEX idx_members_tier ON members(tier);
+CREATE INDEX idx_members_status ON members(status);
+CREATE INDEX idx_members_zip ON members(address_zip);
+```
+
+### CLEANER
+```sql
+CREATE TABLE cleaners (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Auth
+  email                   VARCHAR(255) UNIQUE NOT NULL,
+  password_hash           VARCHAR(255) NOT NULL,
+  
+  -- Profile
+  first_name              VARCHAR(100) NOT NULL,
+  last_name               VARCHAR(100) NOT NULL,
+  phone                   VARCHAR(20) NOT NULL,
+  photo_url               VARCHAR(500),
+  bio                     TEXT,
+  
+  -- Location
+  address_full            TEXT,
+  address_zip             VARCHAR(10) NOT NULL,
+  address_lat             DECIMAL(10, 8),
+  address_lng             DECIMAL(11, 8),
+  
+  -- Business Settings (CLEANER CONTROLS THESE)
+  hourly_rate             DECIMAL(10, 2) NOT NULL,  -- $/hr they charge
+  max_travel_minutes      INTEGER DEFAULT 45,       -- how far they'll travel
+  
+  -- Zones they serve (many-to-many)
+  -- See cleaner_zones junction table
+  
+  -- Performance Metrics (calculated, stored for query performance)
+  tier                    VARCHAR(20) DEFAULT 'rising_star', -- rising_star | established | top_performer
+  rating_average          DECIMAL(3, 2) DEFAULT 0,
+  rating_count            INTEGER DEFAULT 0,
+  jobs_completed          INTEGER DEFAULT 0,
+  jobs_declined           INTEGER DEFAULT 0,
+  jobs_late               INTEGER DEFAULT 0,
+  jobs_reclean            INTEGER DEFAULT 0,
+  total_earnings          DECIMAL(12, 2) DEFAULT 0,
+  
+  -- Stripe (for payouts)
+  stripe_account_id       VARCHAR(255),
+  
+  -- Certification
+  certified_at            TIMESTAMP WITH TIME ZONE,
+  certification_expires   TIMESTAMP WITH TIME ZONE,
+  certification_fee_paid  BOOLEAN DEFAULT FALSE,
+  
+  -- Documents
+  insurance_verified      BOOLEAN DEFAULT FALSE,
+  background_check_passed BOOLEAN DEFAULT FALSE,
+  background_check_date   TIMESTAMP WITH TIME ZONE,
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'pending', -- pending | active | suspended | inactive
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_cleaners_email ON cleaners(email);
+CREATE INDEX idx_cleaners_status ON cleaners(status);
+CREATE INDEX idx_cleaners_tier ON cleaners(tier);
+CREATE INDEX idx_cleaners_zip ON cleaners(address_zip);
+CREATE INDEX idx_cleaners_rating ON cleaners(rating_average DESC);
+```
+
+### CLEANER_ZONES (Junction Table)
+```sql
+CREATE TABLE cleaner_zones (
+  cleaner_id              UUID REFERENCES cleaners(id) ON DELETE CASCADE,
+  zone_id                 UUID REFERENCES zones(id) ON DELETE CASCADE,
+  PRIMARY KEY (cleaner_id, zone_id)
+);
+
+CREATE INDEX idx_cleaner_zones_zone ON cleaner_zones(zone_id);
+```
+
+### CLEANER_SCHEDULE
+```sql
+CREATE TABLE cleaner_schedules (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cleaner_id              UUID REFERENCES cleaners(id) ON DELETE CASCADE,
+  
+  -- Weekly recurring schedule
+  day_of_week             INTEGER NOT NULL, -- 0=Sunday, 1=Monday, ...
+  start_time              TIME NOT NULL,
+  end_time                TIME NOT NULL,
+  
+  -- Constraints
+  UNIQUE(cleaner_id, day_of_week)
+);
+
+CREATE INDEX idx_cleaner_schedules_cleaner ON cleaner_schedules(cleaner_id);
+```
+
+### CLEANER_BLOCKED_DATES
+```sql
+CREATE TABLE cleaner_blocked_dates (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cleaner_id              UUID REFERENCES cleaners(id) ON DELETE CASCADE,
+  
+  blocked_date            DATE NOT NULL,
+  reason                  VARCHAR(255),
+  
+  UNIQUE(cleaner_id, blocked_date)
+);
+
+CREATE INDEX idx_blocked_dates_cleaner ON cleaner_blocked_dates(cleaner_id);
+CREATE INDEX idx_blocked_dates_date ON cleaner_blocked_dates(blocked_date);
+```
+
+### CHECKLIST
+```sql
+CREATE TABLE checklists (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Owner
+  member_id               UUID REFERENCES members(id),
+  
+  -- Generated from assessment
+  tasks                   JSONB NOT NULL, -- [{room, task_name, time_minutes, is_priority}, ...]
+  
+  -- Calculated totals
+  total_tasks             INTEGER NOT NULL,
+  total_time_minutes      INTEGER NOT NULL,
+  effort_hours            DECIMAL(4, 2) NOT NULL,
+  
+  -- Assessment context (for regeneration)
+  rooms                   JSONB,
+  priority_zones          JSONB,
+  service_level           VARCHAR(50),
+  condition               VARCHAR(50),
+  sqft                    INTEGER,
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_checklists_member ON checklists(member_id);
+```
+
+### JOB
+```sql
+CREATE TABLE jobs (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Parties
+  member_id               UUID REFERENCES members(id) NOT NULL,
+  cleaner_id              UUID REFERENCES cleaners(id),
+  
+  -- Scheduling
+  scheduled_date          DATE NOT NULL,
+  scheduled_time          TIME NOT NULL,
+  estimated_duration      INTEGER NOT NULL, -- minutes
+  
+  -- Location (snapshot from member)
+  address_full            TEXT NOT NULL,
+  address_zip             VARCHAR(10) NOT NULL,
+  address_lat             DECIMAL(10, 8),
+  address_lng             DECIMAL(11, 8),
+  
+  -- Scope (SNAPSHOT - copied at booking)
+  checklist_snapshot      JSONB NOT NULL, -- full task list at time of booking
+  task_count              INTEGER NOT NULL,
+  effort_hours            DECIMAL(4, 2) NOT NULL,
+  
+  -- Pricing (SNAPSHOT - calculated at booking)
+  cleaner_rate_snapshot   DECIMAL(10, 2) NOT NULL, -- cleaner's rate at booking
+  platform_fee_snapshot   DECIMAL(4, 2) NOT NULL,  -- fee % at booking (0.18 or 0.13)
+  
+  -- Calculated prices
+  subtotal                DECIMAL(10, 2) NOT NULL, -- effort_hours × cleaner_rate
+  platform_fee_amount     DECIMAL(10, 2) NOT NULL, -- subtotal × platform_fee
+  total_price             DECIMAL(10, 2) NOT NULL, -- subtotal + platform_fee
+  cleaner_payout          DECIMAL(10, 2) NOT NULL, -- subtotal (what cleaner gets)
+  
+  -- Status Flow
+  status                  VARCHAR(20) DEFAULT 'scheduled',
+  -- scheduled → in_progress → completed → verified
+  -- scheduled → declined (cleaner declined)
+  -- scheduled → cancelled (customer cancelled)
+  -- verified → issue_reported → resolved
+  
+  -- Completion
+  started_at              TIMESTAMP WITH TIME ZONE,
+  completed_at            TIMESTAMP WITH TIME ZONE,
+  completion_photos       JSONB, -- [{url, room, uploaded_at}, ...]
+  
+  -- Verification
+  verified_at             TIMESTAMP WITH TIME ZONE,
+  verified_by             VARCHAR(20), -- "auto" | "customer" | "admin"
+  
+  -- Issues
+  issue_reported_at       TIMESTAMP WITH TIME ZONE,
+  issue_description       TEXT,
+  issue_resolved_at       TIMESTAMP WITH TIME ZONE,
+  issue_resolution        TEXT,
+  
+  -- Decline tracking
+  declined_at             TIMESTAMP WITH TIME ZONE,
+  decline_reason          TEXT,
+  original_cleaner_id     UUID REFERENCES cleaners(id), -- if reassigned
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_jobs_member ON jobs(member_id);
+CREATE INDEX idx_jobs_cleaner ON jobs(cleaner_id);
+CREATE INDEX idx_jobs_status ON jobs(status);
+CREATE INDEX idx_jobs_date ON jobs(scheduled_date);
+CREATE INDEX idx_jobs_created ON jobs(created_at DESC);
+```
+
+### RATING
+```sql
+CREATE TABLE ratings (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Links
+  job_id                  UUID REFERENCES jobs(id) NOT NULL,
+  member_id               UUID REFERENCES members(id) NOT NULL,
+  cleaner_id              UUID REFERENCES cleaners(id) NOT NULL,
+  
+  -- Rating (1-5 stars)
+  overall_rating          INTEGER NOT NULL CHECK (overall_rating >= 1 AND overall_rating <= 5),
+  
+  -- Optional breakdown
+  thoroughness_rating     INTEGER CHECK (thoroughness_rating >= 1 AND thoroughness_rating <= 5),
+  punctuality_rating      INTEGER CHECK (punctuality_rating >= 1 AND punctuality_rating <= 5),
+  communication_rating    INTEGER CHECK (communication_rating >= 1 AND communication_rating <= 5),
+  
+  -- Feedback
+  comment                 TEXT,
+  
+  -- Task-level feedback (optional)
+  task_feedback           JSONB, -- [{task_name, completed: true/false, note}, ...]
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(job_id) -- one rating per job
+);
+
+CREATE INDEX idx_ratings_cleaner ON ratings(cleaner_id);
+CREATE INDEX idx_ratings_member ON ratings(member_id);
+CREATE INDEX idx_ratings_created ON ratings(created_at DESC);
+```
+
+### TRANSACTION
+```sql
+CREATE TABLE transactions (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Links
+  job_id                  UUID REFERENCES jobs(id),
+  member_id               UUID REFERENCES members(id),
+  cleaner_id              UUID REFERENCES cleaners(id),
+  payout_batch_id         UUID REFERENCES payout_batches(id),
+  
+  -- Type
+  type                    VARCHAR(50) NOT NULL,
+  -- "job_payment" - customer pays for job
+  -- "cleaner_payout" - cleaner gets paid
+  -- "elite_subscription" - monthly elite fee
+  -- "certification_fee" - annual cleaner cert
+  -- "refund" - money back to customer
+  
+  -- Amounts
+  amount                  DECIMAL(10, 2) NOT NULL,
+  platform_fee            DECIMAL(10, 2) DEFAULT 0,
+  net_amount              DECIMAL(10, 2) NOT NULL, -- amount - platform_fee
+  
+  -- Stripe
+  stripe_payment_intent   VARCHAR(255),
+  stripe_transfer_id      VARCHAR(255),
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'pending', -- pending | completed | failed | refunded
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at            TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_transactions_job ON transactions(job_id);
+CREATE INDEX idx_transactions_member ON transactions(member_id);
+CREATE INDEX idx_transactions_cleaner ON transactions(cleaner_id);
+CREATE INDEX idx_transactions_batch ON transactions(payout_batch_id);
+CREATE INDEX idx_transactions_type ON transactions(type);
+CREATE INDEX idx_transactions_status ON transactions(status);
+```
+
+### PAYOUT_BATCH
+```sql
+CREATE TABLE payout_batches (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Totals
+  total_amount            DECIMAL(12, 2) NOT NULL,
+  job_count               INTEGER NOT NULL,
+  cleaner_count           INTEGER NOT NULL,
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'pending', -- pending | processing | completed | failed
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  processed_at            TIMESTAMP WITH TIME ZONE,
+  completed_at            TIMESTAMP WITH TIME ZONE,
+  
+  -- Errors
+  error_message           TEXT
+);
+
+CREATE INDEX idx_payout_batches_status ON payout_batches(status);
+CREATE INDEX idx_payout_batches_created ON payout_batches(created_at DESC);
+```
+
+### TASK (Admin-Editable Task Library)
+```sql
+CREATE TABLE tasks (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Classification
+  room_type               VARCHAR(50) NOT NULL, -- kitchen, bathroom, bedroom, living_room, etc.
+  
+  -- Task details
+  name                    VARCHAR(255) NOT NULL,
+  description             TEXT,
+  
+  -- When this task applies
+  is_base                 BOOLEAN DEFAULT FALSE,     -- included in standard clean
+  is_priority             BOOLEAN DEFAULT FALSE,     -- added when room is priority
+  is_detailed             BOOLEAN DEFAULT FALSE,     -- added for detailed service level
+  
+  -- Time
+  time_minutes            INTEGER NOT NULL,          -- base time for this task
+  
+  -- Display
+  sort_order              INTEGER DEFAULT 0,
+  
+  -- Status
+  active                  BOOLEAN DEFAULT TRUE,
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(room_type, name)
+);
+
+CREATE INDEX idx_tasks_room ON tasks(room_type);
+CREATE INDEX idx_tasks_active ON tasks(active);
+```
+
+### SETTING (Configurable Values)
+```sql
+CREATE TABLE settings (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Key-value
+  key                     VARCHAR(100) UNIQUE NOT NULL,
+  value                   TEXT NOT NULL,
+  
+  -- Organization
+  category                VARCHAR(50) NOT NULL, -- effort, pricing, guarantee, tier, notification
+  
+  -- Metadata
+  description             TEXT,
+  value_type              VARCHAR(20) DEFAULT 'string', -- string, number, boolean, json
+  
+  -- Timestamps
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_settings_category ON settings(category);
+
+-- SEED DATA for settings
+INSERT INTO settings (key, value, category, description, value_type) VALUES
+-- Pricing
+('platform_fee_free', '0.18', 'pricing', 'Platform fee for Free tier members', 'number'),
+('platform_fee_elite', '0.13', 'pricing', 'Platform fee for Elite tier members', 'number'),
+('elite_monthly_price', '149', 'pricing', 'Monthly price for Elite membership', 'number'),
+('certification_fee', '150', 'pricing', 'Annual cleaner certification fee', 'number'),
+
+-- Effort Modifiers
+('modifier_priority', '1.5', 'effort', 'Multiplier for priority rooms', 'number'),
+('modifier_condition_well_maintained', '1.0', 'effort', 'Multiplier for well-maintained homes', 'number'),
+('modifier_condition_needs_attention', '1.2', 'effort', 'Multiplier for needs-attention homes', 'number'),
+('modifier_condition_needs_reset', '1.4', 'effort', 'Multiplier for needs-reset homes', 'number'),
+('modifier_service_maintenance', '0.8', 'effort', 'Multiplier for maintenance service level', 'number'),
+('modifier_service_refresh', '1.0', 'effort', 'Multiplier for refresh service level', 'number'),
+('modifier_service_detailed', '1.3', 'effort', 'Multiplier for detailed service level', 'number'),
+('modifier_sqft_base', '1500', 'effort', 'Base sqft (1.0x modifier)', 'number'),
+('modifier_sqft_per_500', '0.1', 'effort', 'Additional modifier per 500 sqft over base', 'number'),
+
+-- Guarantees
+('guarantee_window_free', '72', 'guarantee', 'Re-clean window hours for Free tier', 'number'),
+('guarantee_window_elite', '24', 'guarantee', 'Re-clean window hours for Elite tier', 'number'),
+
+-- Tier Thresholds
+('tier_established_jobs', '25', 'tier', 'Jobs required for Established Pro tier', 'number'),
+('tier_established_rating', '4.5', 'tier', 'Rating required for Established Pro tier', 'number'),
+('tier_top_jobs', '75', 'tier', 'Jobs required for Top Performer tier', 'number'),
+('tier_top_rating', '4.8', 'tier', 'Rating required for Top Performer tier', 'number'),
+
+-- Match Score Weights
+('match_weight_distance', '30', 'matching', 'Weight for distance in match score', 'number'),
+('match_weight_rating', '25', 'matching', 'Weight for rating in match score', 'number'),
+('match_weight_tier', '20', 'matching', 'Weight for tier in match score', 'number'),
+('match_weight_availability', '15', 'matching', 'Weight for availability in match score', 'number'),
+('match_weight_history', '10', 'matching', 'Weight for customer history in match score', 'number');
+```
+
+### ZONE
+```sql
+CREATE TABLE zones (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Identity
+  name                    VARCHAR(100) NOT NULL,
+  description             TEXT,
+  
+  -- Coverage
+  zip_codes               JSONB NOT NULL, -- ["85255", "85260", "85262"]
+  
+  -- Stats (calculated)
+  member_count            INTEGER DEFAULT 0,
+  cleaner_count           INTEGER DEFAULT 0,
+  
+  -- Status
+  status                  VARCHAR(20) DEFAULT 'active', -- active | waitlist | inactive
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_zones_status ON zones(status);
+```
+
+### WAITLIST
+```sql
+CREATE TABLE waitlist (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  email                   VARCHAR(255) NOT NULL,
+  zip_code                VARCHAR(10) NOT NULL,
+  
+  -- When they can be notified
+  notified_at             TIMESTAMP WITH TIME ZONE,
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(email, zip_code)
+);
+
+CREATE INDEX idx_waitlist_zip ON waitlist(zip_code);
+```
+
+### NOTE (Internal Annotations)
+```sql
+CREATE TABLE notes (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- What it's attached to
+  entity_type             VARCHAR(50) NOT NULL, -- member, cleaner, job
+  entity_id               UUID NOT NULL,
+  
+  -- Content
+  content                 TEXT NOT NULL,
+  
+  -- Who wrote it
+  created_by              VARCHAR(100), -- admin username/id
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_notes_entity ON notes(entity_type, entity_id);
+CREATE INDEX idx_notes_created ON notes(created_at DESC);
+```
+
+### APPLICATION (Cleaner Applications)
+```sql
+CREATE TABLE applications (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Applicant Info
+  email                   VARCHAR(255) NOT NULL,
+  phone                   VARCHAR(20) NOT NULL,
+  first_name              VARCHAR(100) NOT NULL,
+  last_name               VARCHAR(100) NOT NULL,
+  
+  -- Location
+  address_zip             VARCHAR(10) NOT NULL,
+  
+  -- Experience
+  experience_years        INTEGER,
+  experience_description  TEXT,
+  
+  -- Documents
+  insurance_document_url  VARCHAR(500),
+  
+  -- Background Check
+  background_check_status VARCHAR(20), -- pending, passed, failed
+  background_check_id     VARCHAR(255),
+  
+  -- Decision
+  status                  VARCHAR(20) DEFAULT 'pending', -- pending, approved, rejected
+  decision_at             TIMESTAMP WITH TIME ZONE,
+  decision_by             VARCHAR(100),
+  rejection_reason        TEXT,
+  
+  -- If approved, link to cleaner record
+  cleaner_id              UUID REFERENCES cleaners(id),
+  
+  -- Timestamps
+  created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_applications_status ON applications(status);
+CREATE INDEX idx_applications_created ON applications(created_at DESC);
+```
+
+---
+
+# PART 3: CORE SERVICES
+
+Each service is a module that encapsulates business logic. Services read configuration from the `settings` table.
+
+## 3.1 SETTINGS SERVICE
+
+```typescript
+// Purpose: Read/write configurable values from settings table
+// Used by: All other services
+
+class SettingsService {
+  
+  // Get a single setting value
+  async get(key: string): Promise<string | number | boolean> {
+    const setting = await db.settings.findUnique({ where: { key } });
+    if (!setting) throw new Error(`Setting not found: ${key}`);
+    
+    // Convert based on value_type
+    switch (setting.value_type) {
+      case 'number': return parseFloat(setting.value);
+      case 'boolean': return setting.value === 'true';
+      case 'json': return JSON.parse(setting.value);
+      default: return setting.value;
+    }
+  }
+  
+  // Get all settings in a category
+  async getCategory(category: string): Promise<Record<string, any>> {
+    const settings = await db.settings.findMany({ where: { category } });
+    return settings.reduce((acc, s) => {
+      acc[s.key] = this.parseValue(s);
+      return acc;
+    }, {});
+  }
+  
+  // Update a setting (admin only)
+  async update(key: string, value: string): Promise<void> {
+    await db.settings.update({
+      where: { key },
+      data: { value, updated_at: new Date() }
+    });
+  }
+}
+```
+
+## 3.2 TASK LIBRARY SERVICE
+
+```typescript
+// Purpose: Return tasks for checklist generation
+// Reads from: tasks table (admin-editable)
+
+class TaskLibraryService {
+  
+  // Get all tasks for a room type
+  async getTasksForRoom(
+    roomType: string,
+    options: {
+      isPriority: boolean;
+      serviceLevel: 'maintenance' | 'refresh' | 'detailed';
+    }
+  ): Promise<Task[]> {
+    
+    const tasks = await db.tasks.findMany({
+      where: {
+        room_type: roomType,
+        active: true,
+        OR: [
+          { is_base: true },
+          { is_priority: options.isPriority },
+          { is_detailed: options.serviceLevel === 'detailed' }
+        ]
+      },
+      orderBy: { sort_order: 'asc' }
+    });
+    
+    // Filter based on service level
+    return tasks.filter(task => {
+      // Base tasks always included
+      if (task.is_base) return true;
+      
+      // Priority tasks only if room is priority
+      if (task.is_priority && options.isPriority) return true;
+      
+      // Detailed tasks only for detailed service level
+      if (task.is_detailed && options.serviceLevel === 'detailed') return true;
+      
+      return false;
+    });
+  }
+  
+  // Get all room types
+  async getRoomTypes(): Promise<string[]> {
+    const rooms = await db.tasks.findMany({
+      distinct: ['room_type'],
+      select: { room_type: true }
+    });
+    return rooms.map(r => r.room_type);
+  }
+}
+
+// ROOM TYPES (seed data reference):
+// - kitchen
+// - bathroom
+// - bedroom
+// - living_room
+// - dining_room
+// - office
+// - laundry
+// - entryway
+// - hallway
+// - garage
+```
+
+## 3.3 EFFORT CALCULATOR SERVICE
+
+```typescript
+// Purpose: Calculate total effort hours from checklist
+// Reads from: settings table (modifiers are configurable)
+
+class EffortCalculatorService {
+  
+  constructor(private settings: SettingsService) {}
+  
+  async calculateEffort(
+    tasks: Task[],
+    context: {
+      sqft: number;
+      condition: 'well-maintained' | 'needs-attention' | 'needs-reset';
+      serviceLevel: 'maintenance' | 'refresh' | 'detailed';
+      priorityRooms: string[];
+    }
+  ): Promise<{ totalMinutes: number; effortHours: number }> {
+    
+    // Get modifiers from settings
+    const conditionModifier = await this.settings.get(`modifier_condition_${context.condition.replace('-', '_')}`);
+    const serviceModifier = await this.settings.get(`modifier_service_${context.serviceLevel}`);
+    const priorityModifier = await this.settings.get('modifier_priority');
+    const sqftBase = await this.settings.get('modifier_sqft_base');
+    const sqftPer500 = await this.settings.get('modifier_sqft_per_500');
+    
+    // Calculate sqft modifier
+    const sqftOver = Math.max(0, context.sqft - sqftBase);
+    const sqftModifier = 1 + (Math.floor(sqftOver / 500) * sqftPer500);
+    
+    // Sum base task times
+    let totalMinutes = 0;
+    for (const task of tasks) {
+      let taskTime = task.time_minutes;
+      
+      // Apply priority modifier if this task's room is a priority
+      if (context.priorityRooms.includes(task.room)) {
+        taskTime *= priorityModifier;
+      }
+      
+      totalMinutes += taskTime;
+    }
+    
+    // Apply global modifiers
+    totalMinutes *= conditionModifier;
+    totalMinutes *= serviceModifier;
+    totalMinutes *= sqftModifier;
+    
+    // Round to nearest 15 minutes
+    totalMinutes = Math.round(totalMinutes / 15) * 15;
+    
+    // Convert to hours
+    const effortHours = totalMinutes / 60;
+    
+    return {
+      totalMinutes,
+      effortHours: Math.round(effortHours * 100) / 100 // 2 decimal places
+    };
+  }
+}
+```
+
+## 3.4 PRICING SERVICE
+
+```typescript
+// Purpose: Calculate job price from effort and cleaner rate
+// Reads from: settings table (fees are configurable)
+
+class PricingService {
+  
+  constructor(private settings: SettingsService) {}
+  
+  async calculatePrice(
+    effortHours: number,
+    cleanerRate: number,
+    memberTier: 'free' | 'elite'
+  ): Promise<{
+    subtotal: number;
+    platformFeePercent: number;
+    platformFeeAmount: number;
+    totalPrice: number;
+    cleanerPayout: number;
+  }> {
+    
+    // Get fee from settings
+    const platformFeePercent = await this.settings.get(
+      memberTier === 'elite' ? 'platform_fee_elite' : 'platform_fee_free'
+    );
+    
+    // Calculate
+    const subtotal = effortHours * cleanerRate;
+    const platformFeeAmount = subtotal * platformFeePercent;
+    const totalPrice = subtotal + platformFeeAmount;
+    const cleanerPayout = subtotal; // Cleaner gets full subtotal
+    
+    return {
+      subtotal: Math.round(subtotal * 100) / 100,
+      platformFeePercent,
+      platformFeeAmount: Math.round(platformFeeAmount * 100) / 100,
+      totalPrice: Math.round(totalPrice * 100) / 100,
+      cleanerPayout: Math.round(cleanerPayout * 100) / 100
+    };
+  }
+}
+```
+
+## 3.5 MATCHING SERVICE
+
+```typescript
+// Purpose: Score and rank cleaners for a job
+// Reads from: settings table (weights are configurable)
+
+class MatchingService {
+  
+  constructor(
+    private settings: SettingsService,
+    private availabilityService: AvailabilityService
+  ) {}
+  
+  async getMatchedCleaners(
+    memberZip: string,
+    memberLat: number,
+    memberLng: number,
+    requestedDate: Date,
+    requestedTime: string,
+    estimatedDuration: number,
+    memberId?: string // for history scoring
+  ): Promise<MatchedCleaner[]> {
+    
+    // Get weights from settings
+    const weights = {
+      distance: await this.settings.get('match_weight_distance'),
+      rating: await this.settings.get('match_weight_rating'),
+      tier: await this.settings.get('match_weight_tier'),
+      availability: await this.settings.get('match_weight_availability'),
+      history: await this.settings.get('match_weight_history')
+    };
+    
+    // Get zone for this ZIP
+    const zone = await db.zones.findFirst({
+      where: {
+        zip_codes: { has: memberZip },
+        status: 'active'
+      }
+    });
+    
+    if (!zone) {
+      return []; // No service in this area
+    }
+    
+    // Get active cleaners in this zone
+    const cleaners = await db.cleaners.findMany({
+      where: {
+        status: 'active',
+        zones: { some: { zone_id: zone.id } }
+      }
+    });
+    
+    // Score each cleaner
+    const scored = await Promise.all(cleaners.map(async (cleaner) => {
+      const scores = {
+        distance: this.scoreDistance(cleaner, memberLat, memberLng),
+        rating: this.scoreRating(cleaner),
+        tier: this.scoreTier(cleaner),
+        availability: await this.scoreAvailability(cleaner, requestedDate, requestedTime, estimatedDuration),
+        history: await this.scoreHistory(cleaner, memberId)
+      };
+      
+      // Weighted total
+      const totalScore = 
+        (scores.distance * weights.distance) +
+        (scores.rating * weights.rating) +
+        (scores.tier * weights.tier) +
+        (scores.availability * weights.availability) +
+        (scores.history * weights.history);
+      
+      return {
+        cleaner,
+        scores,
+        totalScore,
+        isAvailable: scores.availability > 0
+      };
+    }));
+    
+    // Filter available only, sort by score descending
+    return scored
+      .filter(s => s.isAvailable)
+      .sort((a, b) => b.totalScore - a.totalScore);
+  }
+  
+  private scoreDistance(cleaner: Cleaner, memberLat: number, memberLng: number): number {
+    // Haversine formula for distance
+    const distance = this.calculateDistance(
+      cleaner.address_lat, cleaner.address_lng,
+      memberLat, memberLng
+    );
+    
+    // Convert to minutes (rough estimate: 30mph average)
+    const travelMinutes = (distance / 30) * 60;
+    
+    // Score: 100 if <15min, scales down to 0 at max_travel_minutes
+    if (travelMinutes > cleaner.max_travel_minutes) return 0;
+    if (travelMinutes <= 15) return 100;
+    
+    const range = cleaner.max_travel_minutes - 15;
+    const over = travelMinutes - 15;
+    return 100 - ((over / range) * 100);
+  }
+  
+  private scoreRating(cleaner: Cleaner): number {
+    // Score: rating out of 5, scaled to 100
+    // 4.5+ = 90-100, 4.0-4.5 = 80-90, etc.
+    if (cleaner.rating_count < 3) return 70; // New cleaner default
+    return (cleaner.rating_average / 5) * 100;
+  }
+  
+  private scoreTier(cleaner: Cleaner): number {
+    // Score by tier
+    switch (cleaner.tier) {
+      case 'top_performer': return 100;
+      case 'established': return 75;
+      case 'rising_star': return 50;
+      default: return 50;
+    }
+  }
+  
+  private async scoreAvailability(
+    cleaner: Cleaner,
+    date: Date,
+    time: string,
+    duration: number
+  ): Promise<number> {
+    const isAvailable = await this.availabilityService.checkAvailability(
+      cleaner.id, date, time, duration
+    );
+    return isAvailable ? 100 : 0;
+  }
+  
+  private async scoreHistory(cleaner: Cleaner, memberId?: string): Promise<number> {
+    if (!memberId) return 50; // No history = neutral score
+    
+    // Check if this cleaner has done jobs for this member before
+    const previousJobs = await db.jobs.count({
+      where: {
+        cleaner_id: cleaner.id,
+        member_id: memberId,
+        status: 'verified'
+      }
+    });
+    
+    // More history = higher score (capped at 100)
+    return Math.min(50 + (previousJobs * 10), 100);
+  }
+  
+  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    // Haversine formula - returns miles
+    const R = 3959; // Earth's radius in miles
+    const dLat = this.toRad(lat2 - lat1);
+    const dLng = this.toRad(lng2 - lng1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) * 
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+  
+  private toRad(deg: number): number {
+    return deg * (Math.PI / 180);
+  }
+}
+```
+
+## 3.6 AVAILABILITY SERVICE
+
+```typescript
+// Purpose: Check cleaner availability for booking
+// Reads from: cleaner_schedules, cleaner_blocked_dates, jobs
+
+class AvailabilityService {
+  
+  async checkAvailability(
+    cleanerId: string,
+    date: Date,
+    startTime: string,
+    durationMinutes: number
+  ): Promise<boolean> {
+    
+    // 1. Check if date is blocked
+    const blocked = await db.cleaner_blocked_dates.findFirst({
+      where: {
+        cleaner_id: cleanerId,
+        blocked_date: date
+      }
+    });
+    if (blocked) return false;
+    
+    // 2. Check if cleaner works this day of week
+    const dayOfWeek = date.getDay();
+    const schedule = await db.cleaner_schedules.findFirst({
+      where: {
+        cleaner_id: cleanerId,
+        day_of_week: dayOfWeek
+      }
+    });
+    if (!schedule) return false;
+    
+    // 3. Check if requested time is within working hours
+    const requestedStart = this.timeToMinutes(startTime);
+    const requestedEnd = requestedStart + durationMinutes;
+    const scheduleStart = this.timeToMinutes(schedule.start_time);
+    const scheduleEnd = this.timeToMinutes(schedule.end_time);
+    
+    if (requestedStart < scheduleStart || requestedEnd > scheduleEnd) {
+      return false;
+    }
+    
+    // 4. Check for conflicting jobs
+    const conflictingJob = await db.jobs.findFirst({
+      where: {
+        cleaner_id: cleanerId,
+        scheduled_date: date,
+        status: { in: ['scheduled', 'in_progress'] },
+        // Check time overlap
+        // This is simplified - real implementation needs proper time overlap logic
+      }
+    });
+    if (conflictingJob) return false;
+    
+    return true;
+  }
+  
+  async getAvailableSlots(
+    cleanerId: string,
+    date: Date,
+    durationMinutes: number
+  ): Promise<string[]> {
+    // Returns available start times for this date
+    const slots: string[] = [];
+    
+    // Get schedule for this day
+    const dayOfWeek = date.getDay();
+    const schedule = await db.cleaner_schedules.findFirst({
+      where: { cleaner_id: cleanerId, day_of_week: dayOfWeek }
+    });
+    if (!schedule) return slots;
+    
+    // Check if blocked
+    const blocked = await db.cleaner_blocked_dates.findFirst({
+      where: { cleaner_id: cleanerId, blocked_date: date }
+    });
+    if (blocked) return slots;
+    
+    // Get existing jobs for this day
+    const existingJobs = await db.jobs.findMany({
+      where: {
+        cleaner_id: cleanerId,
+        scheduled_date: date,
+        status: { in: ['scheduled', 'in_progress'] }
+      }
+    });
+    
+    // Generate 30-minute slots
+    const scheduleStart = this.timeToMinutes(schedule.start_time);
+    const scheduleEnd = this.timeToMinutes(schedule.end_time);
+    
+    for (let time = scheduleStart; time + durationMinutes <= scheduleEnd; time += 30) {
+      const slotEnd = time + durationMinutes;
+      
+      // Check against existing jobs
+      const hasConflict = existingJobs.some(job => {
+        const jobStart = this.timeToMinutes(job.scheduled_time);
+        const jobEnd = jobStart + job.estimated_duration;
+        return (time < jobEnd && slotEnd > jobStart);
+      });
+      
+      if (!hasConflict) {
+        slots.push(this.minutesToTime(time));
+      }
+    }
+    
+    return slots;
+  }
+  
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+  
+  private minutesToTime(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+}
+```
+
+## 3.7 CHECKLIST SERVICE
+
+```typescript
+// Purpose: Generate and manage checklists from assessments
+
+class ChecklistService {
+  
+  constructor(
+    private taskLibrary: TaskLibraryService,
+    private effortCalculator: EffortCalculatorService
+  ) {}
+  
+  async generateChecklist(assessment: {
+    rooms: Array<{ type: string; qty: number }>;
+    priorityZones: string[];
+    serviceLevel: 'maintenance' | 'refresh' | 'detailed';
+    condition: 'well-maintained' | 'needs-attention' | 'needs-reset';
+    sqft: number;
+  }): Promise<Checklist> {
+    
+    const allTasks: Array<{
+      room: string;
+      taskName: string;
+      timeMinutes: number;
+      isPriority: boolean;
+    }> = [];
+    
+    // Generate tasks for each room
+    for (const room of assessment.rooms) {
+      const isPriority = assessment.priorityZones.includes(room.type);
+      
+      const roomTasks = await this.taskLibrary.getTasksForRoom(room.type, {
+        isPriority,
+        serviceLevel: assessment.serviceLevel
+      });
+      
+      // Add tasks for each instance of this room type
+      for (let i = 0; i < room.qty; i++) {
+        for (const task of roomTasks) {
+          allTasks.push({
+            room: room.qty > 1 ? `${room.type}_${i + 1}` : room.type,
+            taskName: task.name,
+            timeMinutes: task.time_minutes,
+            isPriority
+          });
+        }
+      }
+    }
+    
+    // Calculate effort
+    const effort = await this.effortCalculator.calculateEffort(
+      allTasks,
+      {
+        sqft: assessment.sqft,
+        condition: assessment.condition,
+        serviceLevel: assessment.serviceLevel,
+        priorityRooms: assessment.priorityZones
+      }
+    );
+    
+    // Create checklist record
+    const checklist = await db.checklists.create({
+      data: {
+        tasks: allTasks,
+        total_tasks: allTasks.length,
+        total_time_minutes: effort.totalMinutes,
+        effort_hours: effort.effortHours,
+        rooms: assessment.rooms,
+        priority_zones: assessment.priorityZones,
+        service_level: assessment.serviceLevel,
+        condition: assessment.condition,
+        sqft: assessment.sqft
+      }
+    });
+    
+    return checklist;
+  }
+}
+```
+
+## 3.8 BOOKING SERVICE
+
+```typescript
+// Purpose: Create jobs with auto-assignment
+
+class BookingService {
+  
+  constructor(
+    private matchingService: MatchingService,
+    private pricingService: PricingService
+  ) {}
+  
+  async createBooking(
+    memberId: string,
+    cleanerId: string,
+    date: Date,
+    time: string
+  ): Promise<Job> {
+    
+    // Get member and their checklist
+    const member = await db.members.findUnique({
+      where: { id: memberId },
+      include: { checklist: true }
+    });
+    
+    // Get cleaner
+    const cleaner = await db.cleaners.findUnique({
+      where: { id: cleanerId }
+    });
+    
+    // Calculate pricing
+    const pricing = await this.pricingService.calculatePrice(
+      member.checklist.effort_hours,
+      cleaner.hourly_rate,
+      member.tier
+    );
+    
+    // Create job with snapshots
+    const job = await db.jobs.create({
+      data: {
+        member_id: memberId,
+        cleaner_id: cleanerId,
+        scheduled_date: date,
+        scheduled_time: time,
+        estimated_duration: member.checklist.total_time_minutes,
+        
+        // Location snapshot
+        address_full: member.address_full,
+        address_zip: member.address_zip,
+        
+        // Checklist snapshot
+        checklist_snapshot: member.checklist.tasks,
+        task_count: member.checklist.total_tasks,
+        effort_hours: member.checklist.effort_hours,
+        
+        // Pricing snapshot
+        cleaner_rate_snapshot: cleaner.hourly_rate,
+        platform_fee_snapshot: pricing.platformFeePercent,
+        subtotal: pricing.subtotal,
+        platform_fee_amount: pricing.platformFeeAmount,
+        total_price: pricing.totalPrice,
+        cleaner_payout: pricing.cleanerPayout,
+        
+        status: 'scheduled'
+      }
+    });
+    
+    // TODO: Send notifications to member and cleaner
+    
+    return job;
+  }
+  
+  async reassignJob(jobId: string, newCleanerId: string): Promise<Job> {
+    const job = await db.jobs.findUnique({ where: { id: jobId } });
+    
+    // Store original cleaner for tracking
+    const originalCleanerId = job.cleaner_id;
+    
+    // Get new cleaner's rate and recalculate
+    const newCleaner = await db.cleaners.findUnique({
+      where: { id: newCleanerId }
+    });
+    
+    const member = await db.members.findUnique({
+      where: { id: job.member_id }
+    });
+    
+    const pricing = await this.pricingService.calculatePrice(
+      job.effort_hours,
+      newCleaner.hourly_rate,
+      member.tier
+    );
+    
+    // Update job
+    const updatedJob = await db.jobs.update({
+      where: { id: jobId },
+      data: {
+        cleaner_id: newCleanerId,
+        original_cleaner_id: originalCleanerId,
+        cleaner_rate_snapshot: newCleaner.hourly_rate,
+        subtotal: pricing.subtotal,
+        platform_fee_amount: pricing.platformFeeAmount,
+        total_price: pricing.totalPrice,
+        cleaner_payout: pricing.cleanerPayout,
+        status: 'scheduled', // Reset from 'declined' if applicable
+        declined_at: null,
+        decline_reason: null
+      }
+    });
+    
+    // TODO: Notify new cleaner and customer
+    
+    return updatedJob;
+  }
+}
+```
+
+## 3.9 PAYOUT SERVICE
+
+```typescript
+// Purpose: Calculate and process cleaner payouts
+
+class PayoutService {
+  
+  async createPayoutBatch(): Promise<PayoutBatch> {
+    // Find all verified jobs not yet included in a payout batch
+    const unpaidJobs = await db.jobs.findMany({
+      where: {
+        status: 'verified',
+        transactions: {
+          none: {
+            type: 'cleaner_payout'
+          }
+        }
+      },
+      include: {
+        cleaner: true
+      }
+    });
+    
+    if (unpaidJobs.length === 0) {
+      throw new Error('No jobs ready for payout');
+    }
+    
+    // Group by cleaner
+    const byCleanerMap = new Map<string, typeof unpaidJobs>();
+    for (const job of unpaidJobs) {
+      const existing = byCleanerMap.get(job.cleaner_id) || [];
+      existing.push(job);
+      byCleanerMap.set(job.cleaner_id, existing);
+    }
+    
+    // Calculate totals
+    const totalAmount = unpaidJobs.reduce((sum, j) => sum + j.cleaner_payout, 0);
+    const cleanerCount = byCleanerMap.size;
+    
+    // Create batch
+    const batch = await db.payout_batches.create({
+      data: {
+        total_amount: totalAmount,
+        job_count: unpaidJobs.length,
+        cleaner_count: cleanerCount,
+        status: 'pending'
+      }
+    });
+    
+    // Create transaction records for each job
+    for (const job of unpaidJobs) {
+      await db.transactions.create({
+        data: {
+          job_id: job.id,
+          cleaner_id: job.cleaner_id,
+          payout_batch_id: batch.id,
+          type: 'cleaner_payout',
+          amount: job.cleaner_payout,
+          platform_fee: 0,
+          net_amount: job.cleaner_payout,
+          status: 'pending'
+        }
+      });
+    }
+    
+    return batch;
+  }
+  
+  async processBatch(batchId: string): Promise<void> {
+    // Update batch status
+    await db.payout_batches.update({
+      where: { id: batchId },
+      data: { status: 'processing', processed_at: new Date() }
+    });
+    
+    // Get all transactions in this batch, grouped by cleaner
+    const transactions = await db.transactions.findMany({
+      where: { payout_batch_id: batchId },
+      include: { cleaner: true }
+    });
+    
+    // Group by cleaner
+    const byCleanerMap = new Map<string, typeof transactions>();
+    for (const tx of transactions) {
+      const existing = byCleanerMap.get(tx.cleaner_id) || [];
+      existing.push(tx);
+      byCleanerMap.set(tx.cleaner_id, existing);
+    }
+    
+    // Process each cleaner's payout via Stripe
+    for (const [cleanerId, cleanerTxs] of byCleanerMap) {
+      const cleaner = cleanerTxs[0].cleaner;
+      const totalPayout = cleanerTxs.reduce((sum, tx) => sum + tx.amount, 0);
+      
+      try {
+        // Create Stripe transfer
+        const transfer = await stripe.transfers.create({
+          amount: Math.round(totalPayout * 100), // cents
+          currency: 'usd',
+          destination: cleaner.stripe_account_id
+        });
+        
+        // Update transactions
+        for (const tx of cleanerTxs) {
+          await db.transactions.update({
+            where: { id: tx.id },
+            data: {
+              stripe_transfer_id: transfer.id,
+              status: 'completed',
+              completed_at: new Date()
+            }
+          });
+        }
+        
+        // Update cleaner's total earnings
+        await db.cleaners.update({
+          where: { id: cleanerId },
+          data: {
+            total_earnings: { increment: totalPayout }
+          }
+        });
+        
+      } catch (error) {
+        // Mark transactions as failed
+        for (const tx of cleanerTxs) {
+          await db.transactions.update({
+            where: { id: tx.id },
+            data: { status: 'failed' }
+          });
+        }
+      }
+    }
+    
+    // Check if all transactions completed
+    const failedCount = await db.transactions.count({
+      where: { payout_batch_id: batchId, status: 'failed' }
+    });
+    
+    await db.payout_batches.update({
+      where: { id: batchId },
+      data: {
+        status: failedCount > 0 ? 'failed' : 'completed',
+        completed_at: new Date(),
+        error_message: failedCount > 0 ? `${failedCount} transfers failed` : null
+      }
+    });
+  }
+}
+```
+
+## 3.10 METRICS SERVICE
+
+```typescript
+// Purpose: Calculate metrics for dashboard and analytics
+
+class MetricsService {
+  
+  async getDashboardMetrics(): Promise<DashboardMetrics> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Jobs today
+    const jobsToday = await db.jobs.count({
+      where: { scheduled_date: today }
+    });
+    
+    const jobsInProgress = await db.jobs.count({
+      where: { status: 'in_progress' }
+    });
+    
+    // Revenue this month
+    const monthRevenue = await db.transactions.aggregate({
+      where: {
+        type: 'job_payment',
+        status: 'completed',
+        created_at: { gte: monthStart }
+      },
+      _sum: { platform_fee: true }
+    });
+    
+    // Elite subscriptions this month
+    const eliteRevenue = await db.transactions.aggregate({
+      where: {
+        type: 'elite_subscription',
+        status: 'completed',
+        created_at: { gte: monthStart }
+      },
+      _sum: { amount: true }
+    });
+    
+    // Active counts
+    const activeMembers = await db.members.count({
+      where: { status: 'active' }
+    });
+    
+    const eliteMembers = await db.members.count({
+      where: { status: 'active', tier: 'elite' }
+    });
+    
+    const activeCleaners = await db.cleaners.count({
+      where: { status: 'active' }
+    });
+    
+    // Needs attention
+    const pendingApplications = await db.applications.count({
+      where: { status: 'pending' }
+    });
+    
+    const jobsNeedingAction = await db.jobs.count({
+      where: { status: { in: ['declined', 'issue_reported'] } }
+    });
+    
+    const pendingPayoutAmount = await db.jobs.aggregate({
+      where: {
+        status: 'verified',
+        transactions: { none: { type: 'cleaner_payout' } }
+      },
+      _sum: { cleaner_payout: true }
+    });
+    
+    return {
+      jobsToday,
+      jobsInProgress,
+      revenueMTD: (monthRevenue._sum.platform_fee || 0) + (eliteRevenue._sum.amount || 0),
+      activeMembers,
+      eliteMembers,
+      activeCleaners,
+      needsAttention: {
+        pendingApplications,
+        jobsNeedingAction,
+        pendingPayoutAmount: pendingPayoutAmount._sum.cleaner_payout || 0
+      }
+    };
+  }
+  
+  async getConversionFunnel(days: number = 7): Promise<ConversionFunnel> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    
+    const zipEntered = await db.leads.count({
+      where: { zip_entered_at: { gte: since } }
+    });
+    
+    const assessmentStarted = await db.leads.count({
+      where: { assessment_started_at: { gte: since } }
+    });
+    
+    const assessmentCompleted = await db.leads.count({
+      where: { assessment_completed_at: { gte: since } }
+    });
+    
+    const resultsViewed = await db.leads.count({
+      where: { results_viewed_at: { gte: since } }
+    });
+    
+    const converted = await db.leads.count({
+      where: { converted_at: { gte: since } }
+    });
+    
+    return {
+      zipEntered,
+      assessmentStarted,
+      assessmentCompleted,
+      resultsViewed,
+      converted,
+      conversionRate: zipEntered > 0 ? (converted / zipEntered) * 100 : 0
+    };
+  }
+  
+  async getCleanerMetrics(cleanerId: string): Promise<CleanerMetrics> {
+    const cleaner = await db.cleaners.findUnique({
+      where: { id: cleanerId }
+    });
+    
+    // Calculate rates
+    const completionRate = cleaner.jobs_completed / 
+      (cleaner.jobs_completed + cleaner.jobs_declined) * 100 || 0;
+    
+    const onTimeRate = (cleaner.jobs_completed - cleaner.jobs_late) / 
+      cleaner.jobs_completed * 100 || 0;
+    
+    const reCleanRate = cleaner.jobs_reclean / 
+      cleaner.jobs_completed * 100 || 0;
+    
+    const declineRate = cleaner.jobs_declined / 
+      (cleaner.jobs_completed + cleaner.jobs_declined) * 100 || 0;
+    
+    return {
+      completionRate: Math.round(completionRate),
+      onTimeRate: Math.round(onTimeRate),
+      reCleanRate: Math.round(reCleanRate * 10) / 10,
+      declineRate: Math.round(declineRate),
+      rating: cleaner.rating_average,
+      totalEarnings: cleaner.total_earnings,
+      jobsCompleted: cleaner.jobs_completed
+    };
+  }
+}
+```
+
+## 3.11 TIER SERVICE
+
+```typescript
+// Purpose: Calculate and update cleaner tiers based on performance
+
+class TierService {
+  
+  constructor(private settings: SettingsService) {}
+  
+  async calculateTier(cleanerId: string): Promise<'rising_star' | 'established' | 'top_performer'> {
+    const cleaner = await db.cleaners.findUnique({
+      where: { id: cleanerId }
+    });
+    
+    // Get thresholds from settings
+    const establishedJobs = await this.settings.get('tier_established_jobs');
+    const establishedRating = await this.settings.get('tier_established_rating');
+    const topJobs = await this.settings.get('tier_top_jobs');
+    const topRating = await this.settings.get('tier_top_rating');
+    
+    // Check Top Performer first
+    if (
+      cleaner.jobs_completed >= topJobs &&
+      cleaner.rating_average >= topRating
+    ) {
+      return 'top_performer';
+    }
+    
+    // Check Established
+    if (
+      cleaner.jobs_completed >= establishedJobs &&
+      cleaner.rating_average >= establishedRating
+    ) {
+      return 'established';
+    }
+    
+    // Default to Rising Star
+    return 'rising_star';
+  }
+  
+  async updateCleanerTier(cleanerId: string): Promise<void> {
+    const newTier = await this.calculateTier(cleanerId);
+    
+    await db.cleaners.update({
+      where: { id: cleanerId },
+      data: { tier: newTier }
+    });
+  }
+  
+  // Call this after each job completion / rating
+  async recalculateAfterJob(cleanerId: string): Promise<void> {
+    // Recalculate rating average
+    const ratings = await db.ratings.aggregate({
+      where: { cleaner_id: cleanerId },
+      _avg: { overall_rating: true },
+      _count: true
+    });
+    
+    await db.cleaners.update({
+      where: { id: cleanerId },
+      data: {
+        rating_average: ratings._avg.overall_rating || 0,
+        rating_count: ratings._count
+      }
+    });
+    
+    // Update tier
+    await this.updateCleanerTier(cleanerId);
+  }
+}
+```
+
+---
+
+# PART 4: API CONTRACT
+
+## 4.1 API OVERVIEW
+
+```
+BASE URL: /api
+
+AUTHENTICATION:
+- Public endpoints: No auth required
+- Customer endpoints: JWT (member)
+- Cleaner endpoints: JWT (cleaner)
+- Admin endpoints: JWT (admin) + role check
+
+RESPONSE FORMAT:
+{
+  "success": boolean,
+  "data": object | array | null,
+  "error": string | null,
+  "meta": { pagination, etc. }
+}
+```
+
+## 4.2 PUBLIC ENDPOINTS
+
+### Zones
+```
+GET /api/zones/check?zip=85255
+  Purpose: Check if ZIP is serviceable
+  Response: { serviceable: boolean, zone?: Zone, waitlist_count?: number }
+
+POST /api/zones/waitlist
+  Purpose: Add to waitlist for non-serviceable ZIP
+  Body: { email, zip }
+  Response: { success: true }
+```
+
+### Leads
+```
+POST /api/leads
+  Purpose: Create lead at data capture
+  Body: { email, phone, address, zip }
+  Response: { lead_id }
+
+PUT /api/leads/:id/assessment
+  Purpose: Save assessment progress
+  Body: { step, data }
+  Response: { success: true, next_step }
+
+POST /api/leads/:id/generate-checklist
+  Purpose: Generate checklist after assessment
+  Response: { checklist_id, task_count, effort_hours }
+
+GET /api/leads/:id/results
+  Purpose: Get results page data
+  Response: { checklist_summary, matched_cleaners[] }
+```
+
+### Cleaners (Public Views)
+```
+GET /api/cleaners/:id/public
+  Purpose: Get cleaner public profile for results page
+  Response: { name, photo, tier, rating, bio, rate }
+```
+
+### Applications
+```
+POST /api/applications
+  Purpose: Cleaner applies to join
+  Body: { email, phone, first_name, last_name, zip, experience_years, experience_description }
+  Response: { application_id }
+```
+
+## 4.3 CUSTOMER ENDPOINTS (Auth Required)
+
+### Members
+```
+GET /api/members/me
+  Purpose: Get current member profile
+  Response: { member, checklist }
+
+PUT /api/members/me
+  Purpose: Update profile
+  Body: { phone?, address? }
+  Response: { member }
+
+POST /api/members/upgrade
+  Purpose: Upgrade to Elite
+  Response: { subscription_id, redirect_url }
+
+POST /api/members/cancel
+  Purpose: Cancel Elite subscription
+  Response: { success: true }
+```
+
+### Checklist
+```
+GET /api/members/me/checklist
+  Purpose: Get full checklist (Elite) or summary (Free)
+  Response: { checklist, tier_limited: boolean }
+
+PUT /api/members/me/checklist
+  Purpose: Edit checklist (triggers recalculation)
+  Body: { tasks[], priority_zones[] }
+  Response: { checklist }
+```
+
+### Booking
+```
+GET /api/booking/available-dates
+  Purpose: Get dates with availability
+  Query: ?month=2024-12
+  Response: { dates_with_availability[] }
+
+GET /api/booking/slots?date=2024-12-28
+  Purpose: Get available cleaners and slots for date
+  Response: { cleaners_with_slots[] }
+
+POST /api/booking
+  Purpose: Create booking
+  Body: { cleaner_id, date, time }
+  Response: { job, payment_intent }
+
+POST /api/booking/:id/confirm
+  Purpose: Confirm after payment
+  Body: { payment_intent_id }
+  Response: { job }
+```
+
+### Jobs
+```
+GET /api/members/me/jobs
+  Purpose: Get member's job history
+  Query: ?status=upcoming|past
+  Response: { jobs[] }
+
+GET /api/members/me/jobs/:id
+  Purpose: Get job detail
+  Response: { job, checklist, cleaner }
+
+POST /api/members/me/jobs/:id/cancel
+  Purpose: Cancel upcoming job
+  Response: { success: true, refund_amount }
+
+POST /api/members/me/jobs/:id/reschedule
+  Purpose: Reschedule job
+  Body: { new_date, new_time }
+  Response: { job }
+
+POST /api/members/me/jobs/:id/rate
+  Purpose: Rate completed job
+  Body: { overall_rating, comment?, task_feedback? }
+  Response: { rating }
+
+POST /api/members/me/jobs/:id/report-issue
+  Purpose: Report issue with completed job
+  Body: { description }
+  Response: { success: true }
+```
+
+## 4.4 CLEANER ENDPOINTS (Auth Required)
+
+### Profile
+```
+GET /api/cleaners/me
+  Purpose: Get cleaner profile and stats
+  Response: { cleaner, metrics }
+
+PUT /api/cleaners/me
+  Purpose: Update profile
+  Body: { hourly_rate?, max_travel_minutes?, bio?, photo? }
+  Response: { cleaner }
+
+PUT /api/cleaners/me/zones
+  Purpose: Update zones served
+  Body: { zone_ids[] }
+  Response: { zones[] }
+```
+
+### Schedule
+```
+GET /api/cleaners/me/schedule
+  Purpose: Get weekly schedule + blocked dates
+  Response: { weekly_schedule[], blocked_dates[] }
+
+PUT /api/cleaners/me/schedule
+  Purpose: Update weekly schedule
+  Body: { schedule: [{ day_of_week, start_time, end_time }] }
+  Response: { schedule[] }
+
+POST /api/cleaners/me/blocked-dates
+  Purpose: Block a date
+  Body: { date, reason? }
+  Response: { blocked_date }
+
+DELETE /api/cleaners/me/blocked-dates/:date
+  Purpose: Unblock a date
+  Response: { success: true }
+```
+
+### Jobs
+```
+GET /api/cleaners/me/jobs
+  Purpose: Get assigned jobs
+  Query: ?status=upcoming|today|past
+  Response: { jobs[] }
+
+GET /api/cleaners/me/jobs/:id
+  Purpose: Get job detail with checklist
+  Response: { job, checklist_tasks[], member_address }
+
+POST /api/cleaners/me/jobs/:id/accept
+  Purpose: Accept assigned job (if manual acceptance enabled)
+  Response: { job }
+
+POST /api/cleaners/me/jobs/:id/decline
+  Purpose: Decline assigned job
+  Body: { reason }
+  Response: { success: true }
+
+POST /api/cleaners/me/jobs/:id/start
+  Purpose: Mark job as started
+  Response: { job }
+
+POST /api/cleaners/me/jobs/:id/complete
+  Purpose: Mark job as completed
+  Body: { photos[]? }
+  Response: { job }
+```
+
+### Earnings
+```
+GET /api/cleaners/me/earnings
+  Purpose: Get earnings summary
+  Query: ?period=week|month|all
+  Response: { total, pending_payout, recent_jobs[] }
+
+GET /api/cleaners/me/payouts
+  Purpose: Get payout history
+  Response: { payouts[] }
+```
+
+## 4.5 ADMIN ENDPOINTS (Auth + Admin Role Required)
+
+### Dashboard
+```
+GET /api/admin/dashboard
+  Purpose: Get dashboard metrics
+  Response: { metrics, needs_attention, today_jobs[] }
+```
+
+### Members
+```
+GET /api/admin/members
+  Purpose: List all members
+  Query: ?tier=&status=&search=&page=&limit=
+  Response: { members[], pagination }
+
+GET /api/admin/members/:id
+  Purpose: Get member detail
+  Response: { member, checklist, jobs[], notes[] }
+
+PUT /api/admin/members/:id
+  Purpose: Update member
+  Body: { tier?, status? }
+  Response: { member }
+
+POST /api/admin/members/:id/notes
+  Purpose: Add internal note
+  Body: { content }
+  Response: { note }
+```
+
+### Cleaners
+```
+GET /api/admin/cleaners
+  Purpose: List all cleaners
+  Query: ?tier=&status=&search=&page=&limit=
+  Response: { cleaners[], pagination }
+
+GET /api/admin/cleaners/:id
+  Purpose: Get cleaner detail
+  Response: { cleaner, metrics, schedule, recent_jobs[], notes[] }
+
+PUT /api/admin/cleaners/:id
+  Purpose: Update cleaner
+  Body: { status? }
+  Response: { cleaner }
+
+POST /api/admin/cleaners/:id/notes
+  Purpose: Add internal note
+  Body: { content }
+  Response: { note }
+```
+
+### Applications
+```
+GET /api/admin/applications
+  Purpose: List applications
+  Query: ?status=pending|approved|rejected
+  Response: { applications[] }
+
+GET /api/admin/applications/:id
+  Purpose: Get application detail
+  Response: { application }
+
+POST /api/admin/applications/:id/run-background-check
+  Purpose: Initiate background check
+  Response: { background_check_id }
+
+POST /api/admin/applications/:id/approve
+  Purpose: Approve application
+  Response: { cleaner_id }
+
+POST /api/admin/applications/:id/reject
+  Purpose: Reject application
+  Body: { reason }
+  Response: { success: true }
+```
+
+### Jobs
+```
+GET /api/admin/jobs
+  Purpose: List all jobs
+  Query: ?status=&date=&cleaner_id=&member_id=&page=&limit=
+  Response: { jobs[], pagination }
+
+GET /api/admin/jobs/:id
+  Purpose: Get job detail
+  Response: { job, member, cleaner, checklist }
+
+POST /api/admin/jobs/:id/reassign
+  Purpose: Reassign job to different cleaner
+  Body: { cleaner_id }
+  Response: { job }
+
+POST /api/admin/jobs/:id/resolve-issue
+  Purpose: Resolve reported issue
+  Body: { resolution }
+  Response: { job }
+
+POST /api/admin/jobs/:id/cancel
+  Purpose: Admin cancel job
+  Body: { reason, refund: boolean }
+  Response: { job }
+```
+
+### Payouts
+```
+GET /api/admin/payouts
+  Purpose: Get payout overview
+  Response: { pending_batch?, batches[] }
+
+POST /api/admin/payouts/create-batch
+  Purpose: Create new payout batch
+  Response: { batch }
+
+GET /api/admin/payouts/:id
+  Purpose: Get batch detail
+  Response: { batch, transactions[] }
+
+POST /api/admin/payouts/:id/process
+  Purpose: Process payout batch
+  Response: { batch }
+```
+
+### Leads
+```
+GET /api/admin/leads
+  Purpose: List leads
+  Query: ?status=&page=&limit=
+  Response: { leads[], funnel_stats }
+
+GET /api/admin/leads/:id
+  Purpose: Get lead detail
+  Response: { lead, assessment_data }
+
+POST /api/admin/leads/:id/send-followup
+  Purpose: Send follow-up email
+  Response: { success: true }
+```
+
+### Task Library
+```
+GET /api/admin/tasks
+  Purpose: List all tasks
+  Query: ?room_type=
+  Response: { tasks[] }
+
+POST /api/admin/tasks
+  Purpose: Create task
+  Body: { room_type, name, time_minutes, is_base, is_priority, is_detailed }
+  Response: { task }
+
+PUT /api/admin/tasks/:id
+  Purpose: Update task
+  Body: { name?, time_minutes?, is_base?, is_priority?, is_detailed?, active? }
+  Response: { task }
+
+DELETE /api/admin/tasks/:id
+  Purpose: Deactivate task
+  Response: { success: true }
+```
+
+### Zones
+```
+GET /api/admin/zones
+  Purpose: List zones
+  Response: { zones[], waitlist_summary }
+
+POST /api/admin/zones
+  Purpose: Create zone
+  Body: { name, zip_codes[] }
+  Response: { zone }
+
+PUT /api/admin/zones/:id
+  Purpose: Update zone
+  Body: { name?, zip_codes[]?, status? }
+  Response: { zone }
+```
+
+### Settings
+```
+GET /api/admin/settings
+  Purpose: Get all settings
+  Response: { settings by category }
+
+PUT /api/admin/settings/:key
+  Purpose: Update setting
+  Body: { value }
+  Response: { setting }
+```
+
+## 4.6 WEBHOOK ENDPOINTS
+
+```
+POST /api/webhooks/stripe
+  Purpose: Handle Stripe events
+  Events: payment_intent.succeeded, invoice.paid, etc.
+
+POST /api/webhooks/background-check
+  Purpose: Handle background check results
+  Body: { application_id, status, details }
+```
+
+---
+
+# PART 5: ADMIN CRM SCREENS
+
+## 5.1 TEMPLATE FOUNDATION
+
+```
+Template: arhamkhnz/next-shadcn-admin-dashboard
+GitHub: https://github.com/arhamkhnz/next-shadcn-admin-dashboard
+
+PROVIDES:
+✅ Collapsible sidebar navigation
+✅ TanStack Tables (filtering, sorting, pagination)
+✅ React Hook Form + Zod validation
+✅ Light/dark themes
+✅ Responsive design
+✅ Authentication layouts
+
+CUSTOMIZE:
+- Replace demo entities with Vertex OS entities
+- Wire to API endpoints
+- Add custom screens (Leads, Task Library, Zones)
+```
+
+## 5.2 NAVIGATION STRUCTURE
+
+```
+VERTEX OS CRM
+├── OVERVIEW
+│   └── Dashboard (/dashboard)
+│
+├── OPERATIONS
+│   ├── Jobs (/jobs)
+│   ├── Members (/members)
+│   ├── Cleaners (/cleaners)
+│   └── Payouts (/payouts)
+│
+├── PIPELINE
+│   ├── Applications (/applications)
+│   └── Leads (/leads)
+│
+└── SYSTEM
+    ├── Task Library (/task-library)
+    ├── Zones (/zones)
+    └── Settings (/settings)
+```
+
+## 5.3 SCREEN SPECIFICATIONS
+
+### Dashboard (/dashboard)
+```
+PURPOSE: Morning coffee view - what needs attention
+
+API: GET /api/admin/dashboard
+
+COMPONENTS:
+┌─────────────────────────────────────────────────────────────────┐
+│ METRIC CARDS (4 across)                                         │
+│ - Jobs Today (count + in progress)                              │
+│ - Revenue MTD ($ + % vs last month)                             │
+│ - Active Members (total + Elite count)                          │
+│ - Active Cleaners (count)                                       │
+├─────────────────────────────────────────────────────────────────┤
+│ NEEDS ATTENTION (Alert list)                                    │
+│ - Pending applications badge → link to /applications            │
+│ - Jobs needing action badge → link to /jobs?status=needs_action │
+│ - Issues reported badge → link to /jobs?status=issue            │
+│ - Payouts ready badge → link to /payouts                        │
+├─────────────────────────────────────────────────────────────────┤
+│ TODAY'S JOBS (Table)                                            │
+│ Columns: Time, Customer, Cleaner, Status                        │
+│ Click → opens /jobs/:id                                         │
+├─────────────────────────────────────────────────────────────────┤
+│ THIS WEEK (Mini chart)                                          │
+│ Bar chart: jobs per day + revenue per day                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Jobs (/jobs)
+```
+PURPOSE: Operational command center
+
+API: GET /api/admin/jobs
+
+TABLE COLUMNS:
+- Status (badge: scheduled/in_progress/completed/verified/declined/issue)
+- Date/Time
+- Customer (name, click to /members/:id)
+- Cleaner (name, click to /cleaners/:id)
+- Price ($)
+
+FILTERS:
+- Date range picker
+- Status dropdown
+- Cleaner dropdown
+- Search (customer name)
+
+QUICK FILTERS (tabs):
+- All | Today | Needs Action | Issues
+
+ROW CLICK → Slide-out panel:
+┌─────────────────────────────────────────────────────────────────┐
+│ JOB #1247                                          [X Close]    │
+├─────────────────────────────────────────────────────────────────┤
+│ Status badge                                                    │
+│                                                                 │
+│ CUSTOMER          CLEANER                                       │
+│ Name              Name (tier badge)                             │
+│ Address           Status note (if declined: reason)             │
+│ Phone                                                           │
+│                                                                 │
+│ JOB DETAILS                                                     │
+│ Date/Time | Tasks: X | Effort: X hrs                            │
+│ Customer pays: $X | Cleaner payout: $X                          │
+│                                                                 │
+│ [View Checklist] → expands task list                            │
+│                                                                 │
+│ IF DECLINED:                                                    │
+│ Available cleaners for reassignment table                       │
+│ [Assign] button per cleaner                                     │
+│ [Cancel Job + Notify] button                                    │
+│                                                                 │
+│ IF ISSUE:                                                       │
+│ Issue description                                               │
+│ Resolution input + [Resolve] button                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Members (/members)
+```
+PURPOSE: Customer management
+
+API: GET /api/admin/members
+
+TABLE COLUMNS:
+- Name
+- Tier (badge: Free/Elite)
+- Joined date
+- Jobs (count)
+- LTV ($)
+- Status (badge)
+
+FILTERS:
+- Tier dropdown
+- Status dropdown
+- Search (name, email)
+
+ROW CLICK → Slide-out panel:
+┌─────────────────────────────────────────────────────────────────┐
+│ SARAH M.                                           [X Close]    │
+├─────────────────────────────────────────────────────────────────┤
+│ CONTACT              MEMBERSHIP                                 │
+│ Email                Tier: Elite ($149/mo)                      │
+│ Phone                Since: date                                │
+│ Address              Status: Active                             │
+│                      Next billing: date                         │
+│                                                                 │
+│ HOME PROFILE                                                    │
+│ X sqft | X bed | X bath                                         │
+│ Service level: X                                                │
+│ Priority zones: X, Y                                            │
+│                                                                 │
+│ [View Full Checklist] → modal                                   │
+│                                                                 │
+│ LIFETIME VALUE                                                  │
+│ Total spent: $X | Jobs: X | Avg: $X/job                         │
+│                                                                 │
+│ JOB HISTORY (mini table, last 5)                                │
+│ [View all X jobs]                                               │
+│                                                                 │
+│ INTERNAL NOTES                                                  │
+│ Note list + [Add Note] input                                    │
+│                                                                 │
+│ ACTIONS                                                         │
+│ [Book a Clean] [Edit Profile] [Upgrade/Downgrade] [Cancel]      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Cleaners (/cleaners)
+```
+PURPOSE: Supply management
+
+API: GET /api/admin/cleaners
+
+TABLE COLUMNS:
+- Photo
+- Name
+- Tier (⭐⭐⭐ Top / ⭐⭐ Est / ⭐ Rising)
+- Rating
+- Jobs (count)
+- Status
+
+FILTERS:
+- Tier dropdown
+- Status dropdown
+- Zone dropdown
+- Search
+
+ROW CLICK → Slide-out panel:
+┌─────────────────────────────────────────────────────────────────┐
+│ SOFIA M.                                           [X Close]    │
+├─────────────────────────────────────────────────────────────────┤
+│ [Photo]   SOFIA MARTINEZ                                        │
+│           ⭐⭐⭐ Top Performer                                   │
+│           Rating: 4.92 | X jobs completed                       │
+│                                                                 │
+│ CONTACT              BUSINESS                                   │
+│ Email                Rate: $X/hr                                │
+│ Phone                Travel: Up to X min                        │
+│ Location             Certified: date                            │
+│                                                                 │
+│ PERFORMANCE METRICS                                             │
+│ Completion: X% | On-time: X% | Re-clean: X% | Decline: X%       │
+│                                                                 │
+│ EARNINGS                                                        │
+│ This month: $X | Last month: $X | Total: $X                     │
+│                                                                 │
+│ SCHEDULE (this week mini view)                                  │
+│ [View Full Schedule]                                            │
+│                                                                 │
+│ RECENT JOBS (mini table)                                        │
+│ [View all X jobs]                                               │
+│                                                                 │
+│ INTERNAL NOTES                                                  │
+│ Note list + [Add Note]                                          │
+│                                                                 │
+│ ACTIONS                                                         │
+│ [Assign Job] [Message] [Suspend]                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Payouts (/payouts)
+```
+PURPOSE: Money management
+
+API: GET /api/admin/payouts
+
+SECTIONS:
+┌─────────────────────────────────────────────────────────────────┐
+│ PENDING PAYOUT (card)                                           │
+│ Ready to process: $X                                            │
+│ Jobs: X verified | Cleaners: X                                  │
+│ [Review & Process]                                              │
+├─────────────────────────────────────────────────────────────────┤
+│ REVENUE THIS MONTH (card)                                       │
+│ Gross bookings: $X                                              │
+│ Platform fees: $X                                               │
+│ Elite memberships: $X                                           │
+│ Cleaner certs: $X                                               │
+│ ─────────────                                                   │
+│ Total revenue: $X                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ PAYOUT HISTORY (table)                                          │
+│ Date | Amount | Cleaners | Jobs | Status                        │
+│ Click → batch detail modal                                      │
+└─────────────────────────────────────────────────────────────────┘
+
+[Review & Process] opens:
+┌─────────────────────────────────────────────────────────────────┐
+│ PROCESS PAYOUT                                     [X Close]    │
+├─────────────────────────────────────────────────────────────────┤
+│ BREAKDOWN BY CLEANER                                            │
+│ Cleaner | Jobs | Gross | Payout | ☑ Include                     │
+│ ...                                                             │
+│ TOTAL                                                           │
+│                                                                 │
+│ [Process All Payouts via Stripe]                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Applications (/applications)
+```
+PURPOSE: Cleaner pipeline
+
+API: GET /api/admin/applications
+
+SECTIONS:
+┌─────────────────────────────────────────────────────────────────┐
+│ PENDING REVIEW (X)                                              │
+│ Application cards with:                                         │
+│ - Photo, Name, Applied date                                     │
+│ - Experience summary                                            │
+│ - Area                                                          │
+│ - [Review Application]                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ RECENT DECISIONS (table)                                        │
+│ Date | Name | Decision | Note                                   │
+└─────────────────────────────────────────────────────────────────┘
+
+[Review Application] opens:
+┌─────────────────────────────────────────────────────────────────┐
+│ APPLICATION: NAME                                  [X Close]    │
+├─────────────────────────────────────────────────────────────────┤
+│ [Photo]   NAME                                                  │
+│           Applied: date                                         │
+│                                                                 │
+│ CONTACT                                                         │
+│ Email | Phone | Location                                        │
+│                                                                 │
+│ EXPERIENCE                                                      │
+│ "Description text..."                                           │
+│                                                                 │
+│ DOCUMENTS                                                       │
+│ ☑/☐ Insurance [View]                                            │
+│ ☑/☐ Background check [Run - $35] / [View Results]               │
+│                                                                 │
+│ ACTIONS                                                         │
+│ [Approve] [Reject] [Request More Info]                          │
+│ If rejecting: Reason input                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Leads (/leads)
+```
+PURPOSE: Conversion tracking + follow-up
+
+API: GET /api/admin/leads
+
+SECTIONS:
+┌─────────────────────────────────────────────────────────────────┐
+│ CONVERSION FUNNEL (visual)                                      │
+│ ZIP Entered: X (100%)                                           │
+│ Started Assessment: X (X%)                                      │
+│ Completed Assessment: X (X%)                                    │
+│ Saw Results: X (X%)                                             │
+│ Converted: X (X%)                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ ABANDONED LEADS (table)                                         │
+│ Email | Step Reached | Abandoned | [Email]                      │
+├─────────────────────────────────────────────────────────────────┤
+│ WAITLIST (table)                                                │
+│ Email | ZIP | Signed Up | (Zone name)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Task Library (/task-library)
+```
+PURPOSE: Content management
+
+API: GET /api/admin/tasks
+
+LAYOUT:
+┌─────────────────────────────────────────────────────────────────┐
+│ [Room Type Dropdown] [+ Add Task]                               │
+├─────────────────────────────────────────────────────────────────┤
+│ KITCHEN TASKS (or selected room)                                │
+│                                                                 │
+│ Table:                                                          │
+│ Task | Base ☑ | Priority ☑ | Detailed ☑ | Time | [Edit]         │
+│                                                                 │
+│ Inline editing or modal for task details                        │
+├─────────────────────────────────────────────────────────────────┤
+│ LEGEND                                                          │
+│ Base = included in standard clean                               │
+│ Priority = added when room is priority                          │
+│ Detailed = added for detailed service level                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Zones (/zones)
+```
+PURPOSE: Geographic management
+
+API: GET /api/admin/zones
+
+SECTIONS:
+┌─────────────────────────────────────────────────────────────────┐
+│ ACTIVE SERVICE AREAS                                            │
+│                                                                 │
+│ Zone cards:                                                     │
+│ ┌─────────────────────────────────────────┐                     │
+│ │ NORTH SCOTTSDALE                        │                     │
+│ │ ZIPs: 85255, 85260, 85262, 85266        │                     │
+│ │ Members: X | Cleaners: X | ✓ Active     │                     │
+│ │ [Edit] [View Map]                       │                     │
+│ └─────────────────────────────────────────┘                     │
+├─────────────────────────────────────────────────────────────────┤
+│ WAITLIST DEMAND                                                 │
+│ Table: Area | ZIPs | Waitlist count                             │
+│                                                                 │
+│ [+ Add New Zone]                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Settings (/settings)
+```
+PURPOSE: System configuration
+
+API: GET /api/admin/settings
+
+SECTIONS (accordion or tabs):
+┌─────────────────────────────────────────────────────────────────┐
+│ PRICING                                                         │
+│ Platform fee (Free): [18]%                                      │
+│ Platform fee (Elite): [13]%                                     │
+│ Elite monthly price: $[149]                                     │
+│ Certification fee: $[150]/year                                  │
+│ [Save]                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ EFFORT CALCULATION                                              │
+│ Priority modifier: [1.5]x                                       │
+│ Condition modifiers: [View/Edit]                                │
+│ Service level modifiers: [View/Edit]                            │
+│ Sqft modifier: [View/Edit]                                      │
+│ [Save]                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ TIER THRESHOLDS                                                 │
+│ Established: [25] jobs + [4.5] rating                           │
+│ Top Performer: [75] jobs + [4.8] rating                         │
+│ [Save]                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ GUARANTEES                                                      │
+│ Re-clean window (Free): [72] hours                              │
+│ Re-clean window (Elite): [24] hours                             │
+│ [Save]                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ MATCH SCORING WEIGHTS                                           │
+│ Distance: [30]                                                  │
+│ Rating: [25]                                                    │
+│ Tier: [20]                                                      │
+│ Availability: [15]                                              │
+│ History: [10]                                                   │
+│ [Save]                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ INTEGRATIONS                                                    │
+│ Stripe: Connected ✓ [Manage]                                    │
+│ Payout schedule: Weekly (Fridays)                               │
+│ SMS: Twilio [Configure]                                         │
+│ Email: SendGrid [Configure]                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# PART 6: BUILD SEQUENCE
+
+## 6.1 PHASE OVERVIEW
+
+```
+PHASE 1: DATABASE FOUNDATION (Days 1-2)
+└── All tables, relationships, seed data
+
+PHASE 2: CORE SERVICES (Days 3-5)
+└── Settings, TaskLibrary, Effort, Pricing, Matching, Availability
+
+PHASE 3: API LAYER (Days 6-8)
+└── All endpoints, auth middleware, validation
+
+PHASE 4: ADMIN CRM (Days 9-12)
+└── Template setup, all screens
+
+PHASE 5: INTEGRATION & TESTING (Days 13-14)
+└── Stripe, notifications, end-to-end testing
+```
+
+## 6.2 DETAILED BUILD LADDERS
+
+### PHASE 1: DATABASE FOUNDATION
+
+```
+LADDER: Database Schema
+├── Rung 1.1: Initialize Prisma schema
+├── Rung 1.2: Create Zone entity
+├── Rung 1.3: Create Setting entity + seed default settings
+├── Rung 1.4: Create Task entity + seed task library
+├── Rung 1.5: Create Lead entity
+├── Rung 1.6: Create Member entity
+├── Rung 1.7: Create Checklist entity
+├── Rung 1.8: Create Cleaner entity
+├── Rung 1.9: Create cleaner_zones junction
+├── Rung 1.10: Create cleaner_schedules entity
+├── Rung 1.11: Create cleaner_blocked_dates entity
+├── Rung 1.12: Create Job entity
+├── Rung 1.13: Create Rating entity
+├── Rung 1.14: Create Transaction entity
+├── Rung 1.15: Create PayoutBatch entity
+├── Rung 1.16: Create Application entity
+├── Rung 1.17: Create Note entity
+├── Rung 1.18: Create Waitlist entity
+├── Rung 1.19: Add all indexes
+├── Rung 1.20: Run migration, verify schema
+└── Rung 1.21: Seed test data for development
+
+CHECKPOINT: Can query all tables, relationships work
+```
+
+### PHASE 2: CORE SERVICES
+
+```
+LADDER: Core Services
+├── Rung 2.1: Create SettingsService
+│   ├── get(key)
+│   ├── getCategory(category)
+│   └── update(key, value)
+│
+├── Rung 2.2: Create TaskLibraryService
+│   ├── getTasksForRoom(roomType, options)
+│   ├── getRoomTypes()
+│   └── Test with sample rooms
+│
+├── Rung 2.3: Create EffortCalculatorService
+│   ├── calculateEffort(tasks, context)
+│   ├── Apply all modifiers from settings
+│   └── Test with sample checklist
+│
+├── Rung 2.4: Create PricingService
+│   ├── calculatePrice(effort, rate, tier)
+│   └── Test Free vs Elite pricing
+│
+├── Rung 2.5: Create AvailabilityService
+│   ├── checkAvailability(cleanerId, date, time, duration)
+│   ├── getAvailableSlots(cleanerId, date, duration)
+│   └── Test with schedule + blocked dates + existing jobs
+│
+├── Rung 2.6: Create MatchingService
+│   ├── getMatchedCleaners(params)
+│   ├── All scoring methods
+│   └── Test sorting and filtering
+│
+├── Rung 2.7: Create ChecklistService
+│   ├── generateChecklist(assessment)
+│   └── Test full generation flow
+│
+├── Rung 2.8: Create BookingService
+│   ├── createBooking(memberId, cleanerId, date, time)
+│   ├── reassignJob(jobId, newCleanerId)
+│   └── Test snapshot creation
+│
+├── Rung 2.9: Create PayoutService
+│   ├── createPayoutBatch()
+│   ├── processBatch(batchId)
+│   └── Test batch creation
+│
+├── Rung 2.10: Create MetricsService
+│   ├── getDashboardMetrics()
+│   ├── getConversionFunnel(days)
+│   ├── getCleanerMetrics(cleanerId)
+│   └── Test calculations
+│
+└── Rung 2.11: Create TierService
+    ├── calculateTier(cleanerId)
+    ├── updateCleanerTier(cleanerId)
+    ├── recalculateAfterJob(cleanerId)
+    └── Test tier progression
+
+CHECKPOINT: All services unit tested, integration tested together
+```
+
+### PHASE 3: API LAYER
+
+```
+LADDER: API Endpoints
+├── Rung 3.1: Setup API structure
+│   ├── Auth middleware (JWT)
+│   ├── Role middleware (admin check)
+│   ├── Response helpers
+│   └── Error handling
+│
+├── Rung 3.2: Public Zone endpoints
+│   ├── GET /api/zones/check
+│   └── POST /api/zones/waitlist
+│
+├── Rung 3.3: Public Lead endpoints
+│   ├── POST /api/leads
+│   ├── PUT /api/leads/:id/assessment
+│   ├── POST /api/leads/:id/generate-checklist
+│   └── GET /api/leads/:id/results
+│
+├── Rung 3.4: Public Cleaner endpoints
+│   └── GET /api/cleaners/:id/public
+│
+├── Rung 3.5: Public Application endpoint
+│   └── POST /api/applications
+│
+├── Rung 3.6: Member auth endpoints
+│   ├── POST /api/auth/member/signup
+│   ├── POST /api/auth/member/login
+│   └── POST /api/auth/member/logout
+│
+├── Rung 3.7: Member profile endpoints
+│   ├── GET /api/members/me
+│   ├── PUT /api/members/me
+│   ├── POST /api/members/upgrade
+│   └── POST /api/members/cancel
+│
+├── Rung 3.8: Member checklist endpoints
+│   ├── GET /api/members/me/checklist
+│   └── PUT /api/members/me/checklist
+│
+├── Rung 3.9: Member booking endpoints
+│   ├── GET /api/booking/available-dates
+│   ├── GET /api/booking/slots
+│   ├── POST /api/booking
+│   └── POST /api/booking/:id/confirm
+│
+├── Rung 3.10: Member job endpoints
+│   ├── GET /api/members/me/jobs
+│   ├── GET /api/members/me/jobs/:id
+│   ├── POST /api/members/me/jobs/:id/cancel
+│   ├── POST /api/members/me/jobs/:id/reschedule
+│   ├── POST /api/members/me/jobs/:id/rate
+│   └── POST /api/members/me/jobs/:id/report-issue
+│
+├── Rung 3.11: Cleaner auth endpoints
+│   ├── POST /api/auth/cleaner/login
+│   └── POST /api/auth/cleaner/logout
+│
+├── Rung 3.12: Cleaner profile endpoints
+│   ├── GET /api/cleaners/me
+│   ├── PUT /api/cleaners/me
+│   └── PUT /api/cleaners/me/zones
+│
+├── Rung 3.13: Cleaner schedule endpoints
+│   ├── GET /api/cleaners/me/schedule
+│   ├── PUT /api/cleaners/me/schedule
+│   ├── POST /api/cleaners/me/blocked-dates
+│   └── DELETE /api/cleaners/me/blocked-dates/:date
+│
+├── Rung 3.14: Cleaner job endpoints
+│   ├── GET /api/cleaners/me/jobs
+│   ├── GET /api/cleaners/me/jobs/:id
+│   ├── POST /api/cleaners/me/jobs/:id/decline
+│   ├── POST /api/cleaners/me/jobs/:id/start
+│   └── POST /api/cleaners/me/jobs/:id/complete
+│
+├── Rung 3.15: Cleaner earnings endpoints
+│   ├── GET /api/cleaners/me/earnings
+│   └── GET /api/cleaners/me/payouts
+│
+├── Rung 3.16: Admin auth
+│   └── POST /api/auth/admin/login
+│
+├── Rung 3.17: Admin dashboard endpoint
+│   └── GET /api/admin/dashboard
+│
+├── Rung 3.18: Admin member endpoints
+│   ├── GET /api/admin/members
+│   ├── GET /api/admin/members/:id
+│   ├── PUT /api/admin/members/:id
+│   └── POST /api/admin/members/:id/notes
+│
+├── Rung 3.19: Admin cleaner endpoints
+│   ├── GET /api/admin/cleaners
+│   ├── GET /api/admin/cleaners/:id
+│   ├── PUT /api/admin/cleaners/:id
+│   └── POST /api/admin/cleaners/:id/notes
+│
+├── Rung 3.20: Admin application endpoints
+│   ├── GET /api/admin/applications
+│   ├── GET /api/admin/applications/:id
+│   ├── POST /api/admin/applications/:id/run-background-check
+│   ├── POST /api/admin/applications/:id/approve
+│   └── POST /api/admin/applications/:id/reject
+│
+├── Rung 3.21: Admin job endpoints
+│   ├── GET /api/admin/jobs
+│   ├── GET /api/admin/jobs/:id
+│   ├── POST /api/admin/jobs/:id/reassign
+│   ├── POST /api/admin/jobs/:id/resolve-issue
+│   └── POST /api/admin/jobs/:id/cancel
+│
+├── Rung 3.22: Admin payout endpoints
+│   ├── GET /api/admin/payouts
+│   ├── POST /api/admin/payouts/create-batch
+│   ├── GET /api/admin/payouts/:id
+│   └── POST /api/admin/payouts/:id/process
+│
+├── Rung 3.23: Admin lead endpoints
+│   ├── GET /api/admin/leads
+│   ├── GET /api/admin/leads/:id
+│   └── POST /api/admin/leads/:id/send-followup
+│
+├── Rung 3.24: Admin task endpoints
+│   ├── GET /api/admin/tasks
+│   ├── POST /api/admin/tasks
+│   ├── PUT /api/admin/tasks/:id
+│   └── DELETE /api/admin/tasks/:id
+│
+├── Rung 3.25: Admin zone endpoints
+│   ├── GET /api/admin/zones
+│   ├── POST /api/admin/zones
+│   └── PUT /api/admin/zones/:id
+│
+├── Rung 3.26: Admin settings endpoints
+│   ├── GET /api/admin/settings
+│   └── PUT /api/admin/settings/:key
+│
+└── Rung 3.27: Webhook endpoints
+    ├── POST /api/webhooks/stripe
+    └── POST /api/webhooks/background-check
+
+CHECKPOINT: All endpoints return expected responses, auth works
+```
+
+### PHASE 4: ADMIN CRM
+
+```
+LADDER: Admin CRM Setup
+├── Rung 4.1: Clone template
+│   └── git clone arhamkhnz/next-shadcn-admin-dashboard
+│
+├── Rung 4.2: Clean template
+│   ├── Remove demo pages
+│   ├── Keep: sidebar, tables, forms, theme
+│   └── Update branding to "Vertex OS"
+│
+├── Rung 4.3: Setup API client
+│   ├── Axios instance with auth
+│   ├── Response interceptors
+│   └── Type definitions
+│
+├── Rung 4.4: Configure navigation
+│   └── Update sidebar with Vertex OS structure
+│
+├── Rung 4.5: Build Dashboard page
+│   ├── Metric cards component
+│   ├── Needs attention component
+│   ├── Today's jobs table
+│   └── Weekly chart
+│
+├── Rung 4.6: Build Jobs page
+│   ├── Jobs table with filters
+│   ├── Job detail slide-out panel
+│   ├── Reassignment flow
+│   └── Issue resolution flow
+│
+├── Rung 4.7: Build Members page
+│   ├── Members table
+│   ├── Member detail slide-out panel
+│   ├── Notes component
+│   └── Checklist modal
+│
+├── Rung 4.8: Build Cleaners page
+│   ├── Cleaners table
+│   ├── Cleaner detail slide-out panel
+│   ├── Performance metrics display
+│   └── Schedule viewer
+│
+├── Rung 4.9: Build Payouts page
+│   ├── Pending payout card
+│   ├── Revenue summary
+│   ├── Payout history table
+│   └── Process payout modal
+│
+├── Rung 4.10: Build Applications page
+│   ├── Pending applications list
+│   ├── Application review modal
+│   └── Recent decisions table
+│
+├── Rung 4.11: Build Leads page
+│   ├── Conversion funnel visualization
+│   ├── Abandoned leads table
+│   └── Waitlist table
+│
+├── Rung 4.12: Build Task Library page
+│   ├── Room type selector
+│   ├── Tasks table with checkboxes
+│   ├── Add/edit task modal
+│   └── Time editor
+│
+├── Rung 4.13: Build Zones page
+│   ├── Active zones cards
+│   ├── Waitlist demand section
+│   └── Add/edit zone modal
+│
+├── Rung 4.14: Build Settings page
+│   ├── Pricing section
+│   ├── Effort calculation section
+│   ├── Tier thresholds section
+│   ├── Guarantees section
+│   ├── Match weights section
+│   └── Integrations section
+│
+└── Rung 4.15: Admin authentication
+    ├── Login page
+    └── Session management
+
+CHECKPOINT: All admin screens functional, connected to API
+```
+
+### PHASE 5: INTEGRATION & TESTING
+
+```
+LADDER: Integration
+├── Rung 5.1: Stripe integration
+│   ├── Customer creation
+│   ├── Payment intents for jobs
+│   ├── Subscription for Elite
+│   ├── Connect accounts for cleaners
+│   ├── Transfers for payouts
+│   └── Webhook handling
+│
+├── Rung 5.2: Notification integration
+│   ├── Email setup (SendGrid)
+│   ├── SMS setup (Twilio)
+│   ├── Job confirmation notifications
+│   ├── Reminder notifications
+│   └── Payout notifications
+│
+├── Rung 5.3: Background check integration
+│   ├── Provider setup
+│   ├── Check initiation
+│   └── Webhook handling
+│
+├── Rung 5.4: End-to-end testing
+│   ├── Lead → Member conversion flow
+│   ├── Booking flow
+│   ├── Job lifecycle (scheduled → verified)
+│   ├── Payout flow
+│   └── Cleaner application → approval
+│
+├── Rung 5.5: Error handling audit
+│   ├── API error responses
+│   ├── Frontend error states
+│   └── Logging setup
+│
+└── Rung 5.6: Performance review
+    ├── Database query optimization
+    ├── API response times
+    └── Frontend load times
+
+CHECKPOINT: Full system operational, ready for frontend connection
+```
+
+## 6.3 MINIMUM VIABLE PATH
+
+If time-crunched, build in this order:
+
+```
+WEEK 1 (MVP Backend):
+├── Database schema (all tables)
+├── SettingsService
+├── TaskLibraryService
+├── EffortCalculatorService
+├── PricingService
+├── ChecklistService
+├── Core API endpoints (leads, members, booking)
+└── Basic Stripe (payments only, manual payouts)
+
+WEEK 2 (MVP Admin):
+├── Dashboard (read-only metrics)
+├── Jobs (view + manual reassign)
+├── Members (view only)
+├── Cleaners (view only)
+└── Settings (view only, edit in DB)
+
+DEFER:
+- MatchingService (manual cleaner selection OK for MVP)
+- AvailabilityService (manual scheduling OK for MVP)
+- PayoutService (manual Stripe transfers OK for MVP)
+- Applications flow (manual cleaner onboarding OK)
+- Task Library editing (seed data OK for MVP)
+- Zone management (hardcode OK for MVP)
+```
+
+---
+
+# APPENDIX A: TASK LIBRARY SEED DATA
+
+```sql
+-- KITCHEN
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('kitchen', 'Counters wiped and sanitized', true, true, true, 5, 1),
+('kitchen', 'Stovetop cleaned', true, true, true, 8, 2),
+('kitchen', 'Stovetop detailed (drip pans, knobs)', false, true, true, 12, 3),
+('kitchen', 'Sink scrubbed and sanitized', true, true, true, 5, 4),
+('kitchen', 'Sink fixtures polished', false, true, true, 3, 5),
+('kitchen', 'Appliance exteriors wiped', true, true, true, 6, 6),
+('kitchen', 'Inside microwave cleaned', false, true, true, 5, 7),
+('kitchen', 'Cabinet fronts wiped', false, true, true, 8, 8),
+('kitchen', 'Backsplash wiped', false, true, false, 5, 9),
+('kitchen', 'Floor swept and mopped', true, true, true, 10, 10),
+('kitchen', 'Floor edges and corners detailed', false, false, true, 5, 11),
+('kitchen', 'Trash emptied', true, true, true, 2, 12);
+
+-- BATHROOM
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('bathroom', 'Toilet cleaned and sanitized', true, true, true, 5, 1),
+('bathroom', 'Toilet exterior wiped', true, true, true, 3, 2),
+('bathroom', 'Sink cleaned and sanitized', true, true, true, 5, 3),
+('bathroom', 'Sink fixtures polished', false, true, true, 3, 4),
+('bathroom', 'Mirror cleaned', true, true, true, 3, 5),
+('bathroom', 'Counters wiped', true, true, true, 3, 6),
+('bathroom', 'Shower/tub scrubbed', true, true, true, 10, 7),
+('bathroom', 'Shower doors/curtain cleaned', false, true, true, 5, 8),
+('bathroom', 'Shower grout detailed', false, false, true, 10, 9),
+('bathroom', 'Floor swept and mopped', true, true, true, 5, 10),
+('bathroom', 'Trash emptied', true, true, true, 2, 11),
+('bathroom', 'Towels folded/arranged', false, true, false, 3, 12);
+
+-- BEDROOM
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('bedroom', 'Bed made', true, true, true, 5, 1),
+('bedroom', 'Bed linens changed', false, true, true, 10, 2),
+('bedroom', 'Nightstands dusted', true, true, true, 3, 3),
+('bedroom', 'Dresser tops dusted', true, true, true, 3, 4),
+('bedroom', 'Floor vacuumed', true, true, true, 8, 5),
+('bedroom', 'Floor edges vacuumed', false, false, true, 4, 6),
+('bedroom', 'Under bed vacuumed', false, false, true, 5, 7),
+('bedroom', 'Mirrors cleaned', false, true, true, 3, 8),
+('bedroom', 'Trash emptied', true, true, true, 2, 9);
+
+-- LIVING ROOM
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('living_room', 'Surfaces dusted', true, true, true, 8, 1),
+('living_room', 'Coffee table cleaned', true, true, true, 3, 2),
+('living_room', 'TV and electronics dusted', true, true, true, 5, 3),
+('living_room', 'Couch cushions straightened', true, true, true, 3, 4),
+('living_room', 'Couch vacuumed', false, true, true, 8, 5),
+('living_room', 'Floor vacuumed', true, true, true, 10, 6),
+('living_room', 'Floor edges vacuumed', false, false, true, 5, 7),
+('living_room', 'Throw pillows arranged', false, true, false, 2, 8),
+('living_room', 'Trash emptied', true, true, true, 2, 9);
+
+-- DINING ROOM
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('dining_room', 'Table wiped and polished', true, true, true, 5, 1),
+('dining_room', 'Chairs wiped', true, true, true, 5, 2),
+('dining_room', 'Surfaces dusted', true, true, true, 5, 3),
+('dining_room', 'Floor vacuumed/swept', true, true, true, 8, 4),
+('dining_room', 'Floor mopped', false, true, true, 5, 5);
+
+-- OFFICE
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('office', 'Desk surface cleared and wiped', true, true, true, 5, 1),
+('office', 'Desk items arranged', false, true, true, 3, 2),
+('office', 'Shelves dusted', true, true, true, 5, 3),
+('office', 'Electronics dusted', true, true, true, 3, 4),
+('office', 'Floor vacuumed', true, true, true, 8, 5),
+('office', 'Trash emptied', true, true, true, 2, 6);
+
+-- LAUNDRY
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('laundry', 'Appliance exteriors wiped', true, true, true, 5, 1),
+('laundry', 'Counters/surfaces wiped', true, true, true, 3, 2),
+('laundry', 'Floor swept and mopped', true, true, true, 5, 3),
+('laundry', 'Lint trap cleaned', false, true, true, 2, 4);
+
+-- ENTRYWAY
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('entryway', 'Floor swept/vacuumed', true, true, true, 5, 1),
+('entryway', 'Floor mopped', true, true, true, 3, 2),
+('entryway', 'Surfaces dusted', true, true, true, 3, 3),
+('entryway', 'Door and handle wiped', false, true, true, 2, 4),
+('entryway', 'Shoe area organized', false, true, false, 3, 5);
+
+-- HALLWAY
+INSERT INTO tasks (room_type, name, is_base, is_priority, is_detailed, time_minutes, sort_order) VALUES
+('hallway', 'Floor vacuumed/swept', true, true, true, 5, 1),
+('hallway', 'Floor mopped', true, true, true, 3, 2),
+('hallway', 'Surfaces dusted', true, true, true, 3, 3),
+('hallway', 'Light switches wiped', false, false, true, 2, 4);
+```
+
+---
+
+# APPENDIX B: ZONE SEED DATA
+
+```sql
+INSERT INTO zones (name, zip_codes, status) VALUES
+('North Scottsdale', '["85255", "85260", "85262", "85266"]', 'active'),
+('Central Scottsdale', '["85251", "85254", "85257", "85258"]', 'active'),
+('South Scottsdale', '["85250", "85256", "85259"]', 'waitlist'),
+('Paradise Valley', '["85253"]', 'waitlist');
+```
+
+---
+
+# APPENDIX C: TEST CHECKLIST
+
+```
+PRE-LAUNCH VERIFICATION:
+
+[ ] Database
+    [ ] All tables created
+    [ ] Relationships work (can create linked records)
+    [ ] Indexes exist
+    [ ] Settings seeded
+    [ ] Tasks seeded
+    [ ] Zones seeded
+
+[ ] Services
+    [ ] SettingsService reads correctly
+    [ ] TaskLibraryService returns tasks by room/level
+    [ ] EffortCalculator applies all modifiers
+    [ ] PricingService calculates correctly for Free/Elite
+    [ ] AvailabilityService respects schedule + blocked dates + existing jobs
+    [ ] MatchingService scores and sorts correctly
+    [ ] ChecklistService generates complete checklist
+    [ ] BookingService creates job with all snapshots
+    [ ] TierService promotes cleaners correctly
+
+[ ] API
+    [ ] Public endpoints work without auth
+    [ ] Member endpoints require member JWT
+    [ ] Cleaner endpoints require cleaner JWT
+    [ ] Admin endpoints require admin JWT + role
+    [ ] Validation rejects bad input
+    [ ] Errors return proper format
+
+[ ] Admin CRM
+    [ ] Login works
+    [ ] All navigation items load
+    [ ] Dashboard shows live data
+    [ ] Tables filter and sort
+    [ ] Detail panels show full data
+    [ ] Actions (approve, reassign, etc.) work
+
+[ ] Integrations
+    [ ] Stripe payments process
+    [ ] Stripe subscriptions work
+    [ ] Stripe payouts transfer
+    [ ] Email sends
+    [ ] SMS sends
+
+[ ] Full Flows
+    [ ] Lead → Assessment → Checklist → Results → Checkout → Member
+    [ ] Member → Book → Job created with snapshots
+    [ ] Cleaner → Accept/Decline → Start → Complete
+    [ ] Job → Verify → Rate → Cleaner stats update → Tier check
+    [ ] Admin → Create payout batch → Process → Cleaners paid
+```
+
+---
+
+**END OF DOCUMENT**
+
+*This specification is the complete backend foundation for Red Shirt Club. All frontends (customer site, cleaner app, admin CRM) connect to this single backend via the documented API contract.*

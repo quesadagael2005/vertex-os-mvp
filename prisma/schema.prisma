@@ -1,0 +1,712 @@
+// VERTEX OS - Database Schema
+// Last Updated: 2024-12-23
+// See BUILDGUIDELINES for full specification
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ZONES - Geographic Service Areas
+// ============================================================================
+
+model Zone {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  zipCodes      Json     @map("zip_codes") // ["85255", "85260", ...]
+  memberCount   Int      @default(0) @map("member_count")
+  cleanerCount  Int      @default(0) @map("cleaner_count")
+  status        ZoneStatus @default(ACTIVE)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  cleaners      CleanerZone[]
+
+  @@index([status])
+  @@map("zones")
+}
+
+enum ZoneStatus {
+  ACTIVE
+  WAITLIST
+  INACTIVE
+}
+
+// ============================================================================
+// WAITLIST - Users waiting for service in their area
+// ============================================================================
+
+model Waitlist {
+  id          String   @id @default(uuid())
+  email       String
+  zipCode     String   @map("zip_code")
+  notifiedAt  DateTime? @map("notified_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([email, zipCode])
+  @@index([zipCode])
+  @@map("waitlist")
+}
+
+// ============================================================================
+// SETTINGS - Configurable Business Rules
+// ============================================================================
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  category    String   // pricing, effort, guarantee, tier, matching, notification
+  description String?
+  valueType   String   @default("string") @map("value_type") // string, number, boolean, json
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@map("settings")
+}
+
+// ============================================================================
+// TASKS - Admin-Editable Task Library
+// ============================================================================
+
+model Task {
+  id          String   @id @default(uuid())
+  roomType    String   @map("room_type") // kitchen, bathroom, bedroom, etc.
+  name        String
+  description String?
+  isBase      Boolean  @default(false) @map("is_base")
+  isPriority  Boolean  @default(false) @map("is_priority")
+  isDetailed  Boolean  @default(false) @map("is_detailed")
+  timeMinutes Int      @map("time_minutes")
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([roomType, name])
+  @@index([roomType])
+  @@index([active])
+  @@map("tasks")
+}
+
+// ============================================================================
+// LEADS - Pre-Conversion Customer Data
+// ============================================================================
+
+model Lead {
+  id                    String    @id @default(uuid())
+  
+  // Contact Info
+  email                 String
+  phone                 String?
+  addressFull           String?   @map("address_full")
+  addressZip            String    @map("address_zip")
+  
+  // Assessment Data
+  rooms                 Json?     // [{type: "kitchen", qty: 1}, ...]
+  priorityZones         Json?     @map("priority_zones") // ["kitchen", "master_bath"]
+  preferences           Json?     // {beds: "hotel-style", ...}
+  exclusions            Json?     // {rooms: ["office"], notes: "..."}
+  currentState          String?   @map("current_state")
+  serviceLevel          String?   @map("service_level")
+  
+  // Progress Tracking
+  assessmentStep        Int       @default(0) @map("assessment_step")
+  
+  // Funnel Timestamps
+  zipEnteredAt          DateTime? @map("zip_entered_at")
+  assessmentStartedAt   DateTime? @map("assessment_started_at")
+  assessmentCompletedAt DateTime? @map("assessment_completed_at")
+  resultsViewedAt       DateTime? @map("results_viewed_at")
+  convertedAt           DateTime? @map("converted_at")
+  abandonedAt           DateTime? @map("abandoned_at")
+  followUpSentAt        DateTime? @map("follow_up_sent_at")
+  
+  // Generated Checklist
+  checklistId           String?   @map("checklist_id")
+  checklist             Checklist? @relation(fields: [checklistId], references: [id])
+  
+  // Status
+  status                LeadStatus @default(IN_PROGRESS)
+  
+  // Timestamps
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  member                Member?
+
+  @@index([email])
+  @@index([addressZip])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("leads")
+}
+
+enum LeadStatus {
+  IN_PROGRESS
+  COMPLETED
+  CONVERTED
+  ABANDONED
+}
+
+// ============================================================================
+// MEMBERS - Customers (Converted from Leads)
+// ============================================================================
+
+model Member {
+  id                   String   @id @default(uuid())
+  
+  // Origin
+  leadId               String?  @unique @map("lead_id")
+  lead                 Lead?    @relation(fields: [leadId], references: [id])
+  
+  // Auth
+  email                String   @unique
+  passwordHash         String   @map("password_hash")
+  
+  // Contact
+  phone                String?
+  addressFull          String   @map("address_full")
+  addressZip           String   @map("address_zip")
+  
+  // Membership
+  tier                 MemberTier @default(FREE)
+  
+  // Stripe
+  stripeCustomerId     String?  @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  
+  // Home Profile
+  sqft                 Int?
+  bedrooms             Int?
+  bathrooms            Decimal? @db.Decimal(3, 1)
+  
+  // Status
+  status               MemberStatus @default(ACTIVE)
+  
+  // Timestamps
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  // Relationships
+  checklistId          String?  @unique @map("checklist_id")
+  checklist            Checklist? @relation(fields: [checklistId], references: [id])
+  jobs                 Job[]
+  ratings              Rating[]
+  transactions         Transaction[]
+  notes                Note[]
+
+  @@index([email])
+  @@index([tier])
+  @@index([status])
+  @@index([addressZip])
+  @@map("members")
+}
+
+enum MemberTier {
+  FREE
+  ELITE
+}
+
+enum MemberStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+// ============================================================================
+// CHECKLISTS - Generated Task Lists
+// ============================================================================
+
+model Checklist {
+  id               String   @id @default(uuid())
+  
+  // Owner
+  memberId         String?  @unique @map("member_id")
+  member           Member?
+  
+  // Generated Tasks
+  tasks            Json     // [{room, taskName, timeMinutes, isPriority}, ...]
+  
+  // Calculated Totals
+  totalTasks       Int      @map("total_tasks")
+  totalTimeMinutes Int      @map("total_time_minutes")
+  effortHours      Decimal  @map("effort_hours") @db.Decimal(4, 2)
+  
+  // Assessment Context (for regeneration)
+  rooms            Json?
+  priorityZones    Json?    @map("priority_zones")
+  serviceLevel     String?  @map("service_level")
+  condition        String?
+  sqft             Int?
+  
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  leads            Lead[]
+
+  @@index([memberId])
+  @@map("checklists")
+}
+
+// ============================================================================
+// CLEANERS - Independent Contractors
+// ============================================================================
+
+model Cleaner {
+  id                    String   @id @default(uuid())
+  
+  // Auth
+  email                 String   @unique
+  passwordHash          String   @map("password_hash")
+  
+  // Profile
+  firstName             String   @map("first_name")
+  lastName              String   @map("last_name")
+  phone                 String
+  photoUrl              String?  @map("photo_url")
+  bio                   String?
+  
+  // Location
+  addressFull           String?  @map("address_full")
+  addressZip            String   @map("address_zip")
+  addressLat            Decimal? @map("address_lat") @db.Decimal(10, 8)
+  addressLng            Decimal? @map("address_lng") @db.Decimal(11, 8)
+  
+  // Business Settings (Cleaner Controls)
+  hourlyRate            Decimal  @map("hourly_rate") @db.Decimal(10, 2)
+  maxTravelMinutes      Int      @default(45) @map("max_travel_minutes")
+  
+  // Performance Metrics (Calculated)
+  tier                  CleanerTier @default(RISING_STAR)
+  ratingAverage         Decimal  @default(0) @map("rating_average") @db.Decimal(3, 2)
+  ratingCount           Int      @default(0) @map("rating_count")
+  jobsCompleted         Int      @default(0) @map("jobs_completed")
+  jobsDeclined          Int      @default(0) @map("jobs_declined")
+  jobsLate              Int      @default(0) @map("jobs_late")
+  jobsReclean           Int      @default(0) @map("jobs_reclean")
+  totalEarnings         Decimal  @default(0) @map("total_earnings") @db.Decimal(12, 2)
+  
+  // Stripe (for payouts)
+  stripeAccountId       String?  @unique @map("stripe_account_id")
+  
+  // Certification
+  certifiedAt           DateTime? @map("certified_at")
+  certificationExpires  DateTime? @map("certification_expires")
+  certificationFeePaid  Boolean  @default(false) @map("certification_fee_paid")
+  
+  // Documents
+  insuranceVerified     Boolean  @default(false) @map("insurance_verified")
+  backgroundCheckPassed Boolean  @default(false) @map("background_check_passed")
+  backgroundCheckDate   DateTime? @map("background_check_date")
+  
+  // Status
+  status                CleanerStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  
+  // Relationships
+  zones                 CleanerZone[]
+  schedules             CleanerSchedule[]
+  blockedDates          CleanerBlockedDate[]
+  jobs                  Job[]
+  originalJobs          Job[]     @relation("OriginalCleaner")
+  ratings               Rating[]
+  transactions          Transaction[]
+  application           Application?
+  notes                 Note[]
+
+  @@index([email])
+  @@index([status])
+  @@index([tier])
+  @@index([addressZip])
+  @@index([ratingAverage(sort: Desc)])
+  @@map("cleaners")
+}
+
+enum CleanerTier {
+  RISING_STAR
+  ESTABLISHED
+  TOP_PERFORMER
+}
+
+enum CleanerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+// ============================================================================
+// CLEANER_ZONES - Junction Table
+// ============================================================================
+
+model CleanerZone {
+  cleanerId String @map("cleaner_id")
+  zoneId    String @map("zone_id")
+  
+  cleaner   Cleaner @relation(fields: [cleanerId], references: [id], onDelete: Cascade)
+  zone      Zone    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@id([cleanerId, zoneId])
+  @@index([zoneId])
+  @@map("cleaner_zones")
+}
+
+// ============================================================================
+// CLEANER_SCHEDULES - Weekly Recurring Schedules
+// ============================================================================
+
+model CleanerSchedule {
+  id          String @id @default(uuid())
+  cleanerId   String @map("cleaner_id")
+  
+  // Weekly recurring
+  dayOfWeek   Int    @map("day_of_week") // 0=Sunday, 1=Monday, ...
+  startTime   String @map("start_time")  // "09:00"
+  endTime     String @map("end_time")    // "17:00"
+  
+  cleaner     Cleaner @relation(fields: [cleanerId], references: [id], onDelete: Cascade)
+
+  @@unique([cleanerId, dayOfWeek])
+  @@index([cleanerId])
+  @@map("cleaner_schedules")
+}
+
+// ============================================================================
+// CLEANER_BLOCKED_DATES - Unavailable Dates
+// ============================================================================
+
+model CleanerBlockedDate {
+  id           String   @id @default(uuid())
+  cleanerId    String   @map("cleaner_id")
+  blockedDate  DateTime @map("blocked_date") @db.Date
+  reason       String?
+  
+  cleaner      Cleaner  @relation(fields: [cleanerId], references: [id], onDelete: Cascade)
+
+  @@unique([cleanerId, blockedDate])
+  @@index([cleanerId])
+  @@index([blockedDate])
+  @@map("cleaner_blocked_dates")
+}
+
+// ============================================================================
+// JOBS - Bookings with Snapshots
+// ============================================================================
+
+model Job {
+  id                   String   @id @default(uuid())
+  
+  // Parties
+  memberId             String   @map("member_id")
+  member               Member   @relation(fields: [memberId], references: [id])
+  cleanerId            String?  @map("cleaner_id")
+  cleaner              Cleaner? @relation(fields: [cleanerId], references: [id])
+  
+  // Scheduling
+  scheduledDate        DateTime @map("scheduled_date") @db.Date
+  scheduledTime        String   @map("scheduled_time") // "10:00"
+  estimatedDuration    Int      @map("estimated_duration") // minutes
+  
+  // Location (Snapshot)
+  addressFull          String   @map("address_full")
+  addressZip           String   @map("address_zip")
+  addressLat           Decimal? @map("address_lat") @db.Decimal(10, 8)
+  addressLng           Decimal? @map("address_lng") @db.Decimal(11, 8)
+  
+  // Scope (SNAPSHOT - copied at booking)
+  checklistSnapshot    Json     @map("checklist_snapshot")
+  taskCount            Int      @map("task_count")
+  effortHours          Decimal  @map("effort_hours") @db.Decimal(4, 2)
+  
+  // Pricing (SNAPSHOT - calculated at booking)
+  cleanerRateSnapshot  Decimal  @map("cleaner_rate_snapshot") @db.Decimal(10, 2)
+  platformFeeSnapshot  Decimal  @map("platform_fee_snapshot") @db.Decimal(4, 2)
+  
+  // Calculated Prices
+  subtotal             Decimal  @db.Decimal(10, 2)
+  platformFeeAmount    Decimal  @map("platform_fee_amount") @db.Decimal(10, 2)
+  totalPrice           Decimal  @map("total_price") @db.Decimal(10, 2)
+  cleanerPayout        Decimal  @map("cleaner_payout") @db.Decimal(10, 2)
+  
+  // Status Flow
+  status               JobStatus @default(SCHEDULED)
+  
+  // Completion
+  startedAt            DateTime? @map("started_at")
+  completedAt          DateTime? @map("completed_at")
+  completionPhotos     Json?     @map("completion_photos")
+  
+  // Verification
+  verifiedAt           DateTime? @map("verified_at")
+  verifiedBy           String?   @map("verified_by") // "auto" | "customer" | "admin"
+  
+  // Issues
+  issueReportedAt      DateTime? @map("issue_reported_at")
+  issueDescription     String?   @map("issue_description")
+  issueResolvedAt      DateTime? @map("issue_resolved_at")
+  issueResolution      String?   @map("issue_resolution")
+  
+  // Decline Tracking
+  declinedAt           DateTime? @map("declined_at")
+  declineReason        String?   @map("decline_reason")
+  originalCleanerId    String?   @map("original_cleaner_id")
+  originalCleaner      Cleaner?  @relation("OriginalCleaner", fields: [originalCleanerId], references: [id])
+  
+  // Timestamps
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  
+  // Relationships
+  rating               Rating?
+  transactions         Transaction[]
+  notes                Note[]
+
+  @@index([memberId])
+  @@index([cleanerId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([createdAt(sort: Desc)])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  DECLINED
+  CANCELLED
+  ISSUE_REPORTED
+  RESOLVED
+}
+
+// ============================================================================
+// RATINGS - Post-Job Feedback
+// ============================================================================
+
+model Rating {
+  id                   String   @id @default(uuid())
+  
+  // Links
+  jobId                String   @unique @map("job_id")
+  job                  Job      @relation(fields: [jobId], references: [id])
+  memberId             String   @map("member_id")
+  member               Member   @relation(fields: [memberId], references: [id])
+  cleanerId            String   @map("cleaner_id")
+  cleaner              Cleaner  @relation(fields: [cleanerId], references: [id])
+  
+  // Rating (1-5 stars)
+  overallRating        Int      @map("overall_rating")
+  
+  // Optional Breakdown
+  thoroughnessRating   Int?     @map("thoroughness_rating")
+  punctualityRating    Int?     @map("punctuality_rating")
+  communicationRating  Int?     @map("communication_rating")
+  
+  // Feedback
+  comment              String?
+  taskFeedback         Json?    @map("task_feedback")
+  
+  // Timestamp
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([cleanerId])
+  @@index([memberId])
+  @@index([createdAt(sort: Desc)])
+  @@map("ratings")
+}
+
+// ============================================================================
+// TRANSACTIONS - Financial Records
+// ============================================================================
+
+model Transaction {
+  id                  String   @id @default(uuid())
+  
+  // Links
+  jobId               String?  @map("job_id")
+  job                 Job?     @relation(fields: [jobId], references: [id])
+  memberId            String?  @map("member_id")
+  member              Member?  @relation(fields: [memberId], references: [id])
+  cleanerId           String?  @map("cleaner_id")
+  cleaner             Cleaner? @relation(fields: [cleanerId], references: [id])
+  payoutBatchId       String?  @map("payout_batch_id")
+  payoutBatch         PayoutBatch? @relation(fields: [payoutBatchId], references: [id])
+  
+  // Type
+  type                TransactionType
+  
+  // Amounts
+  amount              Decimal  @db.Decimal(10, 2)
+  platformFee         Decimal  @default(0) @map("platform_fee") @db.Decimal(10, 2)
+  netAmount           Decimal  @map("net_amount") @db.Decimal(10, 2)
+  
+  // Stripe
+  stripePaymentIntent String?  @map("stripe_payment_intent")
+  stripeTransferId    String?  @map("stripe_transfer_id")
+  
+  // Status
+  status              TransactionStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt           DateTime @default(now()) @map("created_at")
+  completedAt         DateTime? @map("completed_at")
+
+  @@index([jobId])
+  @@index([memberId])
+  @@index([cleanerId])
+  @@index([payoutBatchId])
+  @@index([type])
+  @@index([status])
+  @@map("transactions")
+}
+
+enum TransactionType {
+  JOB_PAYMENT
+  CLEANER_PAYOUT
+  ELITE_SUBSCRIPTION
+  CERTIFICATION_FEE
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================================================
+// PAYOUT_BATCHES - Weekly Cleaner Payouts
+// ============================================================================
+
+model PayoutBatch {
+  id            String   @id @default(uuid())
+  
+  // Totals
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(12, 2)
+  jobCount      Int      @map("job_count")
+  cleanerCount  Int      @map("cleaner_count")
+  
+  // Status
+  status        PayoutBatchStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  processedAt   DateTime? @map("processed_at")
+  completedAt   DateTime? @map("completed_at")
+  
+  // Errors
+  errorMessage  String?  @map("error_message")
+  
+  // Relationships
+  transactions  Transaction[]
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("payout_batches")
+}
+
+enum PayoutBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================================
+// APPLICATIONS - Cleaner Applications
+// ============================================================================
+
+model Application {
+  id                     String   @id @default(uuid())
+  
+  // Applicant Info
+  email                  String
+  phone                  String
+  firstName              String   @map("first_name")
+  lastName               String   @map("last_name")
+  
+  // Location
+  addressZip             String   @map("address_zip")
+  
+  // Experience
+  experienceYears        Int?     @map("experience_years")
+  experienceDescription  String?  @map("experience_description")
+  
+  // Documents
+  insuranceDocumentUrl   String?  @map("insurance_document_url")
+  
+  // Background Check
+  backgroundCheckStatus  String?  @map("background_check_status")
+  backgroundCheckId      String?  @map("background_check_id")
+  
+  // Decision
+  status                 ApplicationStatus @default(PENDING)
+  decisionAt             DateTime? @map("decision_at")
+  decisionBy             String?   @map("decision_by")
+  rejectionReason        String?   @map("rejection_reason")
+  
+  // If approved, link to cleaner
+  cleanerId              String?  @unique @map("cleaner_id")
+  cleaner                Cleaner? @relation(fields: [cleanerId], references: [id])
+  
+  // Timestamps
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("applications")
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// NOTES - Internal Annotations
+// ============================================================================
+
+model Note {
+  id          String   @id @default(uuid())
+  
+  // What it's attached to
+  entityType  String   @map("entity_type") // member, cleaner, job
+  entityId    String   @map("entity_id")
+  
+  // Content
+  content     String
+  
+  // Who wrote it
+  createdBy   String?  @map("created_by")
+  
+  // Timestamp
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  // Relations (polymorphic - manually managed, not enforced by DB)
+  member      Member?  @relation(fields: [entityId], references: [id], map: "note_member_fkey")
+  cleaner     Cleaner? @relation(fields: [entityId], references: [id], map: "note_cleaner_fkey")
+  job         Job?     @relation(fields: [entityId], references: [id], map: "note_job_fkey")
+
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@map("notes")
+}
+
