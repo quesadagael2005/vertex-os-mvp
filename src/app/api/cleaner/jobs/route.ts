@@ -3,7 +3,12 @@
 
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/client';
-import { requireRole, jsonResponse, errorResponse, unauthorizedResponse } from '@/lib/auth/middleware';
+import {
+  requireRole,
+  jsonResponse,
+  errorResponse,
+  unauthorizedResponse,
+} from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,12 +47,11 @@ export async function GET(request: NextRequest) {
     });
 
     return jsonResponse(jobs);
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error fetching jobs:', error);
     return errorResponse('Failed to fetch jobs', 500);
   }
 }
-

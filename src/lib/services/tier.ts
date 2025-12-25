@@ -48,12 +48,7 @@ export class TierService {
         tier: 'free',
         monthlyPriceCents: 0,
         discountPercent: 0,
-        features: [
-          'Pay per clean',
-          'Standard scheduling',
-          'Basic support',
-          'Online booking',
-        ],
+        features: ['Pay per clean', 'Standard scheduling', 'Basic support', 'Online booking'],
       },
       silver: {
         tier: 'silver',
@@ -108,23 +103,23 @@ export class TierService {
 
     // Define which tier unlocks each feature
     const featureRequirements: Record<string, number> = {
-      'pay_per_clean': 0,           // free
-      'standard_scheduling': 0,      // free
-      'basic_support': 0,            // free
-      'online_booking': 0,           // free
-      'priority_scheduling': 1,      // silver+
-      'email_support': 1,            // silver+
-      'flexible_cancellation': 1,    // silver+
-      'preferred_cleaner': 2,        // gold+
-      'phone_support': 2,            // gold+
-      'same_day_cancellation': 2,    // gold+
-      'monthly_deep_clean': 2,       // gold+
-      'top_priority': 3,             // diamond
-      'dedicated_cleaner': 3,        // diamond
-      'concierge_support': 3,        // diamond
-      'anytime_cancellation': 3,     // diamond
-      'eco_products_included': 3,    // diamond
-      'special_occasion': 3,         // diamond
+      pay_per_clean: 0, // free
+      standard_scheduling: 0, // free
+      basic_support: 0, // free
+      online_booking: 0, // free
+      priority_scheduling: 1, // silver+
+      email_support: 1, // silver+
+      flexible_cancellation: 1, // silver+
+      preferred_cleaner: 2, // gold+
+      phone_support: 2, // gold+
+      same_day_cancellation: 2, // gold+
+      monthly_deep_clean: 2, // gold+
+      top_priority: 3, // diamond
+      dedicated_cleaner: 3, // diamond
+      concierge_support: 3, // diamond
+      anytime_cancellation: 3, // diamond
+      eco_products_included: 3, // diamond
+      special_occasion: 3, // diamond
     };
 
     const requiredTier = featureRequirements[feature];
@@ -154,10 +149,7 @@ export class TierService {
   /**
    * Update member's tier
    */
-  async updateMemberTier(
-    memberId: string,
-    newTier: MemberTier
-  ): Promise<void> {
+  async updateMemberTier(memberId: string, newTier: MemberTier): Promise<void> {
     await prisma.member.update({
       where: { id: memberId },
       data: { tier: newTier },
@@ -273,9 +265,10 @@ export class TierService {
       select: { totalCents: true },
     });
 
-    const avgJobPrice = completedJobs.length > 0
-      ? completedJobs.reduce((sum, j) => sum + j.totalCents, 0) / completedJobs.length
-      : 5000; // Default $50
+    const avgJobPrice =
+      completedJobs.length > 0
+        ? completedJobs.reduce((sum, j) => sum + j.totalCents, 0) / completedJobs.length
+        : 5000; // Default $50
 
     // Recommendation logic
     let recommendedTier: MemberTier = currentTier;
@@ -286,7 +279,9 @@ export class TierService {
 
     // If booking monthly or more, consider Silver
     if (currentTier === 'free' && jobsPerMonth >= 1) {
-      const silverSavings = (avgJobPrice * jobsPerMonth * (tiers.silver.discountPercent / 100)) - tiers.silver.monthlyPriceCents;
+      const silverSavings =
+        avgJobPrice * jobsPerMonth * (tiers.silver.discountPercent / 100) -
+        tiers.silver.monthlyPriceCents;
       if (silverSavings > 0) {
         recommendedTier = 'silver';
         reason = 'You could save on monthly cleanings';
@@ -296,7 +291,9 @@ export class TierService {
 
     // If booking twice a month or more, consider Gold
     if ((currentTier === 'free' || currentTier === 'silver') && jobsPerMonth >= 2) {
-      const goldSavings = (avgJobPrice * jobsPerMonth * (tiers.gold.discountPercent / 100)) - tiers.gold.monthlyPriceCents;
+      const goldSavings =
+        avgJobPrice * jobsPerMonth * (tiers.gold.discountPercent / 100) -
+        tiers.gold.monthlyPriceCents;
       if (goldSavings > 0) {
         recommendedTier = 'gold';
         reason = 'You could save significantly with bi-weekly cleanings';
@@ -306,7 +303,9 @@ export class TierService {
 
     // If booking weekly, consider Diamond
     if (currentTier !== 'diamond' && jobsPerMonth >= 4) {
-      const diamondSavings = (avgJobPrice * jobsPerMonth * (tiers.diamond.discountPercent / 100)) - tiers.diamond.monthlyPriceCents;
+      const diamondSavings =
+        avgJobPrice * jobsPerMonth * (tiers.diamond.discountPercent / 100) -
+        tiers.diamond.monthlyPriceCents;
       if (diamondSavings > 0) {
         recommendedTier = 'diamond';
         reason = 'Maximum savings for weekly cleanings';
@@ -325,4 +324,3 @@ export class TierService {
 
 // Export singleton instance
 export const tierService = new TierService();
-

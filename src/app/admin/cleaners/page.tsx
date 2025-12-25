@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { prisma } from '@/lib/db/client';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { Star, Briefcase, DollarSign } from 'lucide-react';
 
 export default async function CleanersPage() {
@@ -33,9 +33,8 @@ export default async function CleanersPage() {
         },
       });
 
-      const avgRating = ratings.length > 0
-        ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
-        : 0;
+      const avgRating =
+        ratings.length > 0 ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length : 0;
 
       return {
         ...cleaner,
@@ -64,9 +63,7 @@ export default async function CleanersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cleaners</h1>
-          <p className="text-muted-foreground">
-            Manage cleaner profiles and assignments
-          </p>
+          <p className="text-muted-foreground">Manage cleaner profiles and assignments</p>
         </div>
         <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90">
           + Add Cleaner
@@ -131,16 +128,20 @@ export default async function CleanersPage() {
       {/* Cleaners Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {cleanersWithStats.map((cleaner) => (
-          <Card key={cleaner.id} className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
+          <Card
+            key={cleaner.id}
+            className="cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+          >
             {/* Header */}
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-6">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-bold text-white">
-                    {cleaner.firstName[0]}{cleaner.lastName[0]}
+                    {cleaner.firstName[0]}
+                    {cleaner.lastName[0]}
                   </div>
                   <div>
-                    <p className="font-bold text-lg">
+                    <p className="text-lg font-bold">
                       {cleaner.firstName} {cleaner.lastName}
                     </p>
                     {getStatusBadge(cleaner.status)}
@@ -150,7 +151,7 @@ export default async function CleanersPage() {
             </div>
 
             {/* Stats */}
-            <div className="p-6 space-y-4">
+            <div className="space-y-4 p-6">
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1 text-lg font-bold text-yellow-500">
@@ -177,7 +178,7 @@ export default async function CleanersPage() {
 
               {/* Zones */}
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Service Zones:</p>
+                <p className="mb-2 text-xs font-medium text-gray-500">Service Zones:</p>
                 <div className="flex flex-wrap gap-1">
                   {cleaner.zones.slice(0, 3).map((cz) => (
                     <Badge key={cz.zoneId} variant="outline" className="text-xs">
@@ -195,9 +196,7 @@ export default async function CleanersPage() {
               {/* Footer */}
               <div className="flex items-center justify-between border-t pt-4 text-xs text-gray-500">
                 <span>Joined {formatDate(cleaner.createdAt)}</span>
-                <button className="text-primary hover:underline">
-                  View Profile →
-                </button>
+                <button className="text-primary hover:underline">View Profile →</button>
               </div>
             </div>
           </Card>
@@ -206,4 +205,3 @@ export default async function CleanersPage() {
     </div>
   );
 }
-

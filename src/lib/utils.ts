@@ -1,7 +1,7 @@
 // Utility functions for shadcn/ui components
 
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
 /**
  * Merge Tailwind CSS classes with clsx
@@ -61,4 +61,3 @@ export function calculatePercentage(value: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((value / total) * 100);
 }
-

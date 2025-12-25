@@ -12,13 +12,16 @@ export default async function SettingsPage() {
   });
 
   // Group settings by category
-  const settingsByCategory = settings.reduce((acc, setting) => {
-    if (!acc[setting.category]) {
-      acc[setting.category] = [];
-    }
-    acc[setting.category].push(setting);
-    return acc;
-  }, {} as Record<string, typeof settings>);
+  const settingsByCategory = settings.reduce(
+    (acc, setting) => {
+      if (!acc[setting.category]) {
+        acc[setting.category] = [];
+      }
+      acc[setting.category].push(setting);
+      return acc;
+    },
+    {} as Record<string, typeof settings>
+  );
 
   const categories = Object.keys(settingsByCategory).sort();
 
@@ -63,13 +66,9 @@ export default async function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">
-            Configure system-wide settings and defaults
-          </p>
+          <p className="text-muted-foreground">Configure system-wide settings and defaults</p>
         </div>
-        <Button className="bg-primary">
-          Save All Changes
-        </Button>
+        <Button className="bg-primary">Save All Changes</Button>
       </div>
 
       {/* Settings by Category */}
@@ -79,11 +78,11 @@ export default async function SettingsPage() {
 
         return (
           <Card key={category}>
-            <div className="p-6 border-b bg-gray-50 dark:bg-gray-800">
+            <div className="border-b bg-gray-50 p-6 dark:bg-gray-800">
               <div className="flex items-center gap-3">
                 <Icon className="h-6 w-6 text-primary" />
                 <div>
-                  <h3 className="font-semibold text-lg">{categoryName}</h3>
+                  <h3 className="text-lg font-semibold">{categoryName}</h3>
                   <p className="text-sm text-gray-500">
                     {settingsByCategory[category].length} settings
                   </p>
@@ -95,23 +94,23 @@ export default async function SettingsPage() {
               {settingsByCategory[category].map((setting) => (
                 <div
                   key={setting.id}
-                  className="p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="p-6 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
+                      <div className="mb-1 flex items-center gap-3">
                         <h4 className="font-semibold">{setting.key}</h4>
                       </div>
 
                       {setting.description && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
                           {setting.description}
                         </p>
                       )}
 
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-gray-500">Current Value:</span>
-                        <span className="font-mono text-sm font-medium bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded">
+                        <span className="rounded bg-gray-100 px-3 py-1 font-mono text-sm font-medium dark:bg-gray-700">
                           {formatValue(setting.value, setting.key)}
                         </span>
                       </div>
@@ -130,16 +129,14 @@ export default async function SettingsPage() {
 
       {/* Danger Zone */}
       <Card className="border-red-200 dark:border-red-900">
-        <div className="p-6 border-b bg-red-50 dark:bg-red-900/10">
-          <h3 className="font-semibold text-lg text-red-600 dark:text-red-400">
-            ⚠️ Danger Zone
-          </h3>
+        <div className="border-b bg-red-50 p-6 dark:bg-red-900/10">
+          <h3 className="text-lg font-semibold text-red-600 dark:text-red-400">⚠️ Danger Zone</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Irreversible and destructive actions
           </p>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">Reset All Settings to Defaults</p>
@@ -152,7 +149,7 @@ export default async function SettingsPage() {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center justify-between border-t pt-4">
             <div>
               <p className="font-medium">Clear All Data</p>
               <p className="text-sm text-gray-500">
@@ -168,19 +165,17 @@ export default async function SettingsPage() {
 
       {/* System Info */}
       <Card>
-        <div className="p-6 border-b">
-          <h3 className="font-semibold text-lg">System Information</h3>
+        <div className="border-b p-6">
+          <h3 className="text-lg font-semibold">System Information</h3>
         </div>
-        <div className="p-6 grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 p-6 md:grid-cols-2">
           <div>
             <p className="text-sm text-gray-500">Version</p>
             <p className="font-mono font-semibold">Vertex OS v1.0.0</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Environment</p>
-            <p className="font-mono font-semibold">
-              {process.env.NODE_ENV || 'development'}
-            </p>
+            <p className="font-mono font-semibold">{process.env.NODE_ENV || 'development'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Database</p>
@@ -195,4 +190,3 @@ export default async function SettingsPage() {
     </div>
   );
 }
-

@@ -3,12 +3,15 @@
 
 import { NextRequest } from 'next/server';
 import { bookingService } from '@/lib/services';
-import { requireRole, jsonResponse, errorResponse, unauthorizedResponse, notFoundResponse } from '@/lib/auth/middleware';
+import {
+  requireRole,
+  jsonResponse,
+  errorResponse,
+  unauthorizedResponse,
+  notFoundResponse,
+} from '@/lib/auth/middleware';
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await requireRole(request, ['member']);
     const body = await request.json();
@@ -51,12 +54,11 @@ export async function POST(
       message: 'Booking rescheduled successfully',
       job: updatedJob,
     });
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error rescheduling booking:', error);
     return errorResponse(error.message || 'Failed to reschedule booking', 500);
   }
 }
-

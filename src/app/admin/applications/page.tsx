@@ -43,14 +43,12 @@ export default async function ApplicationsPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Cleaner Applications</h1>
-        <p className="text-muted-foreground">
-          Review and approve new cleaner applications
-        </p>
+        <p className="text-muted-foreground">Review and approve new cleaner applications</p>
       </div>
 
       {/* Pipeline Overview */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="p-6 border-l-4 border-l-yellow-500">
+        <Card className="border-l-4 border-l-yellow-500 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Pending Review</p>
@@ -60,7 +58,7 @@ export default async function ApplicationsPage() {
           </div>
         </Card>
 
-        <Card className="p-6 border-l-4 border-l-blue-500">
+        <Card className="border-l-4 border-l-blue-500 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">In Review</p>
@@ -70,7 +68,7 @@ export default async function ApplicationsPage() {
           </div>
         </Card>
 
-        <Card className="p-6 border-l-4 border-l-purple-500">
+        <Card className="border-l-4 border-l-purple-500 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Background Check</p>
@@ -80,7 +78,7 @@ export default async function ApplicationsPage() {
           </div>
         </Card>
 
-        <Card className="p-6 border-l-4 border-l-green-500">
+        <Card className="border-l-4 border-l-green-500 p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Approved</p>
@@ -138,28 +136,26 @@ export default async function ApplicationsPage() {
             </thead>
             <tbody className="divide-y">
               {applications.map((app) => (
-                <tr
-                  key={app.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
+                <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                        {app.firstName[0]}{app.lastName[0]}
+                        {app.firstName[0]}
+                        {app.lastName[0]}
                       </div>
                       <div>
                         <p className="font-medium">
                           {app.firstName} {app.lastName}
                         </p>
-                        <p className="text-xs text-gray-500">{app.city}, {app.state}</p>
+                        <p className="text-xs text-gray-500">
+                          {app.city}, {app.state}
+                        </p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm">{app.email}</td>
                   <td className="px-6 py-4 text-sm">{app.phone}</td>
-                  <td className="px-6 py-4 text-sm">
-                    {formatDate(app.createdAt)}
-                  </td>
+                  <td className="px-6 py-4 text-sm">{formatDate(app.createdAt)}</td>
                   <td className="px-6 py-4">{getStatusBadge(app.status)}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
@@ -199,4 +195,3 @@ export default async function ApplicationsPage() {
     </div>
   );
 }
-

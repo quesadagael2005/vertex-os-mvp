@@ -111,9 +111,11 @@ export class PricingService {
     if (input.memberTier && input.memberTier !== 'free') {
       const tierKey = `tier_${input.memberTier}_discount_percent`;
       const discountPercent = (await settingsService.get(tierKey)) as number;
-      
+
       if (discountPercent > 0) {
-        const discountAmountCents = Math.round(subtotalWithModifiersCents * (discountPercent / 100));
+        const discountAmountCents = Math.round(
+          subtotalWithModifiersCents * (discountPercent / 100)
+        );
         tierDiscount = {
           tier: input.memberTier,
           percent: discountPercent,
@@ -133,9 +135,7 @@ export class PricingService {
     const cleanerPayoutCents = subtotalAfterDiscountCents - platformFeeCents;
 
     // Stripe processing (for reference only, deducted at payout)
-    const stripeEstimatedCents = Math.round(
-      totalCents * (stripeFeePercent / 100) + stripeFeeFixed
-    );
+    const stripeEstimatedCents = Math.round(totalCents * (stripeFeePercent / 100) + stripeFeeFixed);
 
     return {
       baseFeeCents: baseFee,
@@ -179,7 +179,7 @@ export class PricingService {
     // Rough effort estimates
     const effortMap = {
       standard: 120, // 2 hours
-      deep: 240,     // 4 hours
+      deep: 240, // 4 hours
       move_out: 360, // 6 hours
     };
 
@@ -206,4 +206,3 @@ export class PricingService {
 
 // Export singleton instance
 export const pricingService = new PricingService();
-

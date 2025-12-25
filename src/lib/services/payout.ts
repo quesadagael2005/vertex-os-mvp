@@ -10,7 +10,7 @@ export interface PayoutCalculation {
   jobCount: number;
   grossPayoutCents: number; // Before Stripe fees
   stripeFeesCents: number;
-  netPayoutCents: number;   // After Stripe fees
+  netPayoutCents: number; // After Stripe fees
   jobs: Array<{
     jobId: string;
     completedAt: Date;
@@ -28,10 +28,7 @@ export class PayoutService {
   /**
    * Calculate payouts for all cleaners in a date range
    */
-  async calculatePayouts(
-    startDate: Date,
-    endDate: Date
-  ): Promise<PayoutCalculation[]> {
+  async calculatePayouts(startDate: Date, endDate: Date): Promise<PayoutCalculation[]> {
     // Get all completed jobs in the period that haven't been paid out
     const jobs = await prisma.job.findMany({
       where: {
@@ -58,10 +55,10 @@ export class PayoutService {
 
     // Group by cleaner
     const cleanerJobs = new Map<string, typeof jobs>();
-    
+
     for (const job of jobs) {
       if (!job.cleanerId) continue;
-      
+
       if (!cleanerJobs.has(job.cleanerId)) {
         cleanerJobs.set(job.cleanerId, []);
       }
@@ -73,11 +70,8 @@ export class PayoutService {
 
     for (const [cleanerId, cleanerJobList] of cleanerJobs.entries()) {
       const cleaner = cleanerJobList[0].cleaner!;
-      
-      const grossPayoutCents = cleanerJobList.reduce(
-        (sum, job) => sum + job.cleanerPayoutCents,
-        0
-      );
+
+      const grossPayoutCents = cleanerJobList.reduce((sum, job) => sum + job.cleanerPayoutCents, 0);
 
       // Stripe fees: 2.9% + $0.30 per transfer
       const stripeFeesCents = Math.round(grossPayoutCents * 0.029) + 30;
@@ -90,7 +84,7 @@ export class PayoutService {
         grossPayoutCents,
         stripeFeesCents,
         netPayoutCents,
-        jobs: cleanerJobList.map(job => ({
+        jobs: cleanerJobList.map((job) => ({
           jobId: job.id,
           completedAt: job.completedAt!,
           payoutCents: job.cleanerPayoutCents,
@@ -140,7 +134,7 @@ export class PayoutService {
     });
 
     // Get all job IDs from payouts
-    const allJobIds = payouts.flatMap(p => p.jobs.map(j => j.jobId));
+    const allJobIds = payouts.flatMap((p) => p.jobs.map((j) => j.jobId));
 
     // Update all jobs with batch ID
     await prisma.job.updateMany({
@@ -214,10 +208,7 @@ export class PayoutService {
   /**
    * Mark payout batch as processed
    */
-  async markBatchProcessed(
-    batchId: string,
-    processedBy: string
-  ): Promise<void> {
+  async markBatchProcessed(batchId: string, processedBy: string): Promise<void> {
     await prisma.payoutBatch.update({
       where: { id: batchId },
       data: {
@@ -264,10 +255,7 @@ export class PayoutService {
       orderBy: { completedAt: 'asc' },
     });
 
-    const totalPendingCents = jobs.reduce(
-      (sum, job) => sum + job.cleanerPayoutCents,
-      0
-    );
+    const totalPendingCents = jobs.reduce((sum, job) => sum + job.cleanerPayoutCents, 0);
 
     return {
       jobCount: jobs.length,
@@ -283,11 +271,13 @@ export class PayoutService {
   async getCleanerPayoutHistory(
     cleanerId: string,
     limit: number = 12
-  ): Promise<Array<{
-    batch: PayoutBatch;
-    jobCount: number;
-    amountCents: number;
-  }>> {
+  ): Promise<
+    Array<{
+      batch: PayoutBatch;
+      jobCount: number;
+      amountCents: number;
+    }>
+  > {
     const batches = await prisma.payoutBatch.findMany({
       where: {
         status: 'processed',
@@ -309,7 +299,7 @@ export class PayoutService {
       },
     });
 
-    return batches.map(batch => ({
+    return batches.map((batch) => ({
       batch: {
         id: batch.id,
         periodStart: batch.periodStart,
@@ -336,11 +326,11 @@ export class PayoutService {
   getNextPayoutDate(): Date {
     const today = new Date();
     const dayOfWeek = today.getDay(); // 0 = Sunday, 5 = Friday
-    
+
     const daysUntilFriday = (5 - dayOfWeek + 7) % 7;
     const nextFriday = new Date(today);
     nextFriday.setDate(today.getDate() + (daysUntilFriday || 7)); // If today is Friday, next Friday
-    
+
     return nextFriday;
   }
 
@@ -351,25 +341,24 @@ export class PayoutService {
     const today = new Date();
     const lastFriday = new Date(today);
     const dayOfWeek = today.getDay();
-    
+
     // Go back to last Friday
     const daysToLastFriday = (dayOfWeek + 2) % 7;
     lastFriday.setDate(today.getDate() - daysToLastFriday);
-    
+
     // Period is last Friday to Thursday (6 days)
     const endDate = new Date(lastFriday);
     endDate.setDate(lastFriday.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
-    
+
     // Start date is 7 days before end date
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - 6);
     startDate.setHours(0, 0, 0, 0);
-    
+
     return { startDate, endDate };
   }
 }
 
 // Export singleton instance
 export const payoutService = new PayoutService();
-

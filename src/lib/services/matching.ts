@@ -28,13 +28,7 @@ export class MatchingService {
    * Returns ranked list of potential matches
    */
   async findBestCleaner(criteria: MatchingCriteria): Promise<CleanerMatch[]> {
-    const {
-      zoneId,
-      date,
-      startTime,
-      durationMinutes,
-      preferredCleanerId,
-    } = criteria;
+    const { zoneId, date, startTime, durationMinutes, preferredCleanerId } = criteria;
 
     // Step 1: Get all available cleaners in the zone
     const availableCleaners = await availabilityService.findAvailableCleaners({
@@ -54,15 +48,16 @@ export class MatchingService {
         preferredCleanerId === result.cleaner.id
       );
 
-      const upcomingJobs = await this.getUpcomingJobCount(
-        result.cleaner.id,
-        date
-      );
+      const upcomingJobs = await this.getUpcomingJobCount(result.cleaner.id, date);
 
       matches.push({
         cleaner: result.cleaner,
         score,
-        reason: this.getMatchReason(result.cleaner, result.isAvailable, preferredCleanerId === result.cleaner.id),
+        reason: this.getMatchReason(
+          result.cleaner,
+          result.isAvailable,
+          preferredCleanerId === result.cleaner.id
+        ),
         isPreferred: preferredCleanerId === result.cleaner.id,
         isAvailable: result.isAvailable,
         upcomingJobs,
@@ -80,9 +75,9 @@ export class MatchingService {
    */
   async getBestMatch(criteria: MatchingCriteria): Promise<CleanerMatch | null> {
     const matches = await this.findBestCleaner(criteria);
-    
+
     // Return first available cleaner, or null if none available
-    const bestAvailable = matches.find(m => m.isAvailable);
+    const bestAvailable = matches.find((m) => m.isAvailable);
     return bestAvailable || null;
   }
 
@@ -127,10 +122,7 @@ export class MatchingService {
   /**
    * Get upcoming job count for a cleaner
    */
-  private async getUpcomingJobCount(
-    cleanerId: string,
-    fromDate: Date
-  ): Promise<number> {
+  private async getUpcomingJobCount(cleanerId: string, fromDate: Date): Promise<number> {
     const count = await prisma.job.count({
       where: {
         cleanerId,
@@ -149,11 +141,7 @@ export class MatchingService {
   /**
    * Generate human-readable match reason
    */
-  private getMatchReason(
-    cleaner: Cleaner,
-    isAvailable: boolean,
-    isPreferred: boolean
-  ): string {
+  private getMatchReason(cleaner: Cleaner, isAvailable: boolean, isPreferred: boolean): string {
     if (!isAvailable) {
       return 'Not available';
     }
@@ -186,10 +174,7 @@ export class MatchingService {
   /**
    * Check if customer has a preferred cleaner
    */
-  async getPreferredCleaner(
-    memberId: string,
-    zoneId: string
-  ): Promise<string | null> {
+  async getPreferredCleaner(memberId: string, zoneId: string): Promise<string | null> {
     // Find the cleaner the member has booked with most recently
     const recentJob = await prisma.job.findFirst({
       where: {
@@ -254,4 +239,3 @@ export class MatchingService {
 
 // Export singleton instance
 export const matchingService = new MatchingService();
-

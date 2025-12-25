@@ -5,13 +5,13 @@ import { taskLibraryService } from './task-library';
 
 export interface RoomSelection {
   roomType: string;
-  quantity: number;  // Number of that room type (e.g., 2 bathrooms)
+  quantity: number; // Number of that room type (e.g., 2 bathrooms)
   taskIds?: string[]; // Optional: specific task IDs (if not all tasks)
 }
 
 export interface EffortModifier {
   type: 'rush' | 'deep_clean' | 'eco_friendly' | 'pet_friendly' | 'custom';
-  multiplier?: number;  // Optional: custom multiplier (e.g., 1.2 for 20% more effort)
+  multiplier?: number; // Optional: custom multiplier (e.g., 1.2 for 20% more effort)
   additionalMinutes?: number; // Optional: add fixed minutes
 }
 
@@ -54,10 +54,8 @@ export class EffortCalculatorService {
 
       if (room.taskIds && room.taskIds.length > 0) {
         // Get specific tasks
-        tasks = await Promise.all(
-          room.taskIds.map(id => taskLibraryService.getTaskById(id))
-        );
-        tasks = tasks.filter(t => t !== null); // Remove null results
+        tasks = await Promise.all(room.taskIds.map((id) => taskLibraryService.getTaskById(id)));
+        tasks = tasks.filter((t) => t !== null); // Remove null results
       } else {
         // Get all tasks for room type
         tasks = await taskLibraryService.getTasksByRoomType(room.roomType);
@@ -72,7 +70,7 @@ export class EffortCalculatorService {
         quantity: room.quantity,
         minutesPerRoom,
         totalMinutes,
-        tasks: tasks.map(task => ({
+        tasks: tasks.map((task) => ({
           id: task!.id,
           name: task!.name,
           effortMinutes: task!.effortMinutes,
@@ -123,11 +121,9 @@ export class EffortCalculatorService {
     taskIds: string[],
     modifiers: EffortModifier[] = []
   ): Promise<EffortResult> {
-    const tasks = await Promise.all(
-      taskIds.map(id => taskLibraryService.getTaskById(id))
-    );
+    const tasks = await Promise.all(taskIds.map((id) => taskLibraryService.getTaskById(id)));
 
-    const validTasks = tasks.filter(t => t !== null);
+    const validTasks = tasks.filter((t) => t !== null);
     const baseEffortMinutes = validTasks.reduce((sum, task) => sum + (task?.effortMinutes || 0), 0);
 
     // Group tasks by room type for breakdown
@@ -148,7 +144,7 @@ export class EffortCalculatorService {
         quantity: 1,
         minutesPerRoom: totalMinutes,
         totalMinutes,
-        tasks: roomTasks.map(task => ({
+        tasks: roomTasks.map((task) => ({
           id: task!.id,
           name: task!.name,
           effortMinutes: task!.effortMinutes,
@@ -233,4 +229,3 @@ export class EffortCalculatorService {
 
 // Export singleton instance
 export const effortCalculatorService = new EffortCalculatorService();
-

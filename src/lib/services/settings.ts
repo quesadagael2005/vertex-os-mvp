@@ -30,7 +30,7 @@ export class SettingsService {
     });
 
     const result: Record<string, any> = {};
-    
+
     for (const setting of settings) {
       result[setting.key] = this.parseValue(setting.value, setting.valueType);
     }
@@ -43,17 +43,14 @@ export class SettingsService {
    */
   async getAll(): Promise<Record<string, Record<string, any>>> {
     const settings = await prisma.setting.findMany();
-    
+
     const result: Record<string, Record<string, any>> = {};
 
     for (const setting of settings) {
       if (!result[setting.category]) {
         result[setting.category] = {};
       }
-      result[setting.category][setting.key] = this.parseValue(
-        setting.value,
-        setting.valueType
-      );
+      result[setting.category][setting.key] = this.parseValue(setting.value, setting.valueType);
     }
 
     return result;
@@ -94,7 +91,7 @@ export class SettingsService {
     valueType?: string;
   }): Promise<void> {
     const valueType = data.valueType || 'string';
-    
+
     // Validate value based on type
     this.validateValue(data.value, valueType);
 
@@ -172,4 +169,3 @@ export class SettingsService {
 
 // Export singleton instance
 export const settingsService = new SettingsService();
-

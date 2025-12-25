@@ -4,16 +4,21 @@
 
 import { NextRequest } from 'next/server';
 import { settingsService } from '@/lib/services';
-import { requireRole, jsonResponse, errorResponse, unauthorizedResponse } from '@/lib/auth/middleware';
+import {
+  requireRole,
+  jsonResponse,
+  errorResponse,
+  unauthorizedResponse,
+} from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireRole(request, ['admin']);
+    await requireRole(request, ['admin']);
     const settings = await settingsService.getAll();
 
     return jsonResponse(settings);
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error fetching settings:', error);
@@ -23,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await requireRole(request, ['admin']);
+    await requireRole(request, ['admin']);
     const body = await request.json();
     const { key, value } = body;
 
@@ -38,12 +43,14 @@ export async function PATCH(request: NextRequest) {
       key,
       value,
     });
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error updating setting:', error);
-    return errorResponse(error.message || 'Failed to update setting', 500);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Failed to update setting',
+      500
+    );
   }
 }
-

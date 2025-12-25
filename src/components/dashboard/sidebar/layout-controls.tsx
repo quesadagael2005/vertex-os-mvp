@@ -1,23 +1,34 @@
-"use client";
+'use client';
 
-import { Settings } from "lucide-react";
+import { Settings } from 'lucide-react';
 
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { ContentLayout, NavbarStyle, SidebarCollapsible, SidebarVariant } from "@/lib/preferences/layout";
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import type {
+  ContentLayout,
+  NavbarStyle,
+  SidebarCollapsible,
+  SidebarVariant,
+} from '@/lib/preferences/layout';
 import {
   applyContentLayout,
   applyNavbarStyle,
   applySidebarCollapsible,
   applySidebarVariant,
-} from "@/lib/preferences/layout-utils";
-import { persistPreference } from "@/lib/preferences/preferences-storage";
-import { THEME_PRESET_OPTIONS, type ThemeMode, type ThemePreset } from "@/lib/preferences/theme";
-import { applyThemeMode, applyThemePreset } from "@/lib/preferences/theme-utils";
-import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
+} from '@/lib/preferences/layout-utils';
+import { persistPreference } from '@/lib/preferences/preferences-storage';
+import { THEME_PRESET_OPTIONS, type ThemeMode, type ThemePreset } from '@/lib/preferences/theme';
+import { applyThemeMode, applyThemePreset } from '@/lib/preferences/theme-utils';
+import { usePreferencesStore } from '@/stores/preferences/preferences-provider';
 
 export function LayoutControls() {
   const themeMode = usePreferencesStore((s) => s.themeMode);
@@ -36,42 +47,42 @@ export function LayoutControls() {
   const onThemePresetChange = async (preset: ThemePreset) => {
     applyThemePreset(preset);
     setThemePreset(preset);
-    persistPreference("theme_preset", preset);
+    persistPreference('theme_preset', preset);
   };
 
-  const onThemeModeChange = async (mode: ThemeMode | "") => {
+  const onThemeModeChange = async (mode: ThemeMode | '') => {
     if (!mode) return;
     applyThemeMode(mode);
     setThemeMode(mode);
-    persistPreference("theme_mode", mode);
+    persistPreference('theme_mode', mode);
   };
 
-  const onContentLayoutChange = async (layout: ContentLayout | "") => {
+  const onContentLayoutChange = async (layout: ContentLayout | '') => {
     if (!layout) return;
     applyContentLayout(layout);
     setContentLayout(layout);
-    persistPreference("content_layout", layout);
+    persistPreference('content_layout', layout);
   };
 
-  const onNavbarStyleChange = async (style: NavbarStyle | "") => {
+  const onNavbarStyleChange = async (style: NavbarStyle | '') => {
     if (!style) return;
     applyNavbarStyle(style);
     setNavbarStyle(style);
-    persistPreference("navbar_style", style);
+    persistPreference('navbar_style', style);
   };
 
-  const onSidebarStyleChange = async (value: SidebarVariant | "") => {
+  const onSidebarStyleChange = async (value: SidebarVariant | '') => {
     if (!value) return;
     setSidebarVariant(value);
     applySidebarVariant(value);
-    persistPreference("sidebar_variant", value);
+    persistPreference('sidebar_variant', value);
   };
 
-  const onSidebarCollapseModeChange = async (value: SidebarCollapsible | "") => {
+  const onSidebarCollapseModeChange = async (value: SidebarCollapsible | '') => {
     if (!value) return;
     setSidebarCollapsible(value);
     applySidebarCollapsible(value);
-    persistPreference("sidebar_collapsible", value);
+    persistPreference('sidebar_collapsible', value);
   };
 
   return (
@@ -84,15 +95,18 @@ export function LayoutControls() {
       <PopoverContent align="end">
         <div className="flex flex-col gap-5">
           <div className="space-y-1.5">
-            <h4 className="font-medium text-sm leading-none">Preferences</h4>
-            <p className="text-muted-foreground text-xs">Customize your dashboard layout preferences.</p>
-            <p className="font-medium text-muted-foreground text-xs">
-              *Preferences use cookies by default. You can switch between cookies, localStorage, or no storage in code.
+            <h4 className="text-sm font-medium leading-none">Preferences</h4>
+            <p className="text-xs text-muted-foreground">
+              Customize your dashboard layout preferences.
+            </p>
+            <p className="text-xs font-medium text-muted-foreground">
+              *Preferences use cookies by default. You can switch between cookies, localStorage, or
+              no storage in code.
             </p>
           </div>
-          <div className="space-y-3 **:data-[slot=toggle-group]:w-full **:data-[slot=toggle-group-item]:flex-1 **:data-[slot=toggle-group-item]:text-xs">
+          <div className="**:data-[slot=toggle-group]:w-full **:data-[slot=toggle-group-item]:flex-1 **:data-[slot=toggle-group-item]:text-xs space-y-3">
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Theme Preset</Label>
+              <Label className="text-xs font-medium">Theme Preset</Label>
               <Select value={themePreset} onValueChange={onThemePresetChange}>
                 <SelectTrigger size="sm" className="w-full text-xs">
                   <SelectValue placeholder="Preset" />
@@ -103,7 +117,8 @@ export function LayoutControls() {
                       <span
                         className="size-2.5 rounded-full"
                         style={{
-                          backgroundColor: themeMode === "dark" ? preset.primary.dark : preset.primary.light,
+                          backgroundColor:
+                            themeMode === 'dark' ? preset.primary.dark : preset.primary.light,
                         }}
                       />
                       {preset.label}
@@ -114,7 +129,7 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Theme Mode</Label>
+              <Label className="text-xs font-medium">Theme Mode</Label>
               <ToggleGroup
                 size="sm"
                 variant="outline"
@@ -132,7 +147,7 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Page Layout</Label>
+              <Label className="text-xs font-medium">Page Layout</Label>
               <ToggleGroup
                 size="sm"
                 variant="outline"
@@ -150,7 +165,7 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Navbar Behavior</Label>
+              <Label className="text-xs font-medium">Navbar Behavior</Label>
               <ToggleGroup
                 size="sm"
                 variant="outline"
@@ -168,7 +183,7 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Sidebar Style</Label>
+              <Label className="text-xs font-medium">Sidebar Style</Label>
               <ToggleGroup
                 size="sm"
                 variant="outline"
@@ -189,7 +204,7 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Sidebar Collapse Mode</Label>
+              <Label className="text-xs font-medium">Sidebar Collapse Mode</Label>
               <ToggleGroup
                 size="sm"
                 variant="outline"

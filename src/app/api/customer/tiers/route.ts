@@ -3,7 +3,12 @@
 
 import { NextRequest } from 'next/server';
 import { tierService } from '@/lib/services';
-import { requireRole, jsonResponse, errorResponse, unauthorizedResponse } from '@/lib/auth/middleware';
+import {
+  requireRole,
+  jsonResponse,
+  errorResponse,
+  unauthorizedResponse,
+} from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,12 +21,11 @@ export async function GET(request: NextRequest) {
       tiers,
       recommendation,
     });
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error fetching tiers:', error);
     return errorResponse('Failed to fetch tiers', 500);
   }
 }
-

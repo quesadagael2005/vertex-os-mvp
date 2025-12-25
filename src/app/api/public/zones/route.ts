@@ -16,4 +16,3 @@ export async function GET() {
     return errorResponse('Failed to fetch zones', 500);
   }
 }
-

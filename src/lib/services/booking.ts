@@ -49,9 +49,7 @@ export class BookingService {
     }
 
     // Step 2: Calculate effort
-    const effort = await effortCalculatorService.calculateEffortFromTasks(
-      input.taskIds
-    );
+    const effort = await effortCalculatorService.calculateEffortFromTasks(input.taskIds);
 
     // Step 3: Calculate pricing
     const pricing = await pricingService.calculatePrice({
@@ -87,16 +85,16 @@ export class BookingService {
         scheduledDate: input.scheduledDate,
         scheduledTime: input.scheduledTime,
         estimatedDurationMinutes: effort.modifiedEffortMinutes,
-        
+
         // Snapshot pricing at booking time
         totalCents: pricing.totalCents,
         cleanerPayoutCents: pricing.cleanerPayoutCents,
         platformFeeCents: pricing.platformFee.amountCents,
-        
+
         // Snapshot member tier
         memberTier: member.tier,
         tierDiscountCents: pricing.tierDiscount?.amountCents || 0,
-        
+
         notes: input.notes,
       },
     });
@@ -215,11 +213,7 @@ export class BookingService {
   /**
    * Cancel a booking
    */
-  async cancelBooking(
-    jobId: string,
-    reason: string,
-    cancelledBy: string
-  ): Promise<void> {
+  async cancelBooking(jobId: string, reason: string, cancelledBy: string): Promise<void> {
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -298,11 +292,7 @@ export class BookingService {
   /**
    * Add rating to completed job
    */
-  async rateJob(
-    jobId: string,
-    rating: number,
-    review?: string
-  ): Promise<void> {
+  async rateJob(jobId: string, rating: number, review?: string): Promise<void> {
     if (rating < 1 || rating > 5) {
       throw new Error('Rating must be between 1 and 5');
     }
@@ -413,4 +403,3 @@ export class BookingService {
 
 // Export singleton instance
 export const bookingService = new BookingService();
-

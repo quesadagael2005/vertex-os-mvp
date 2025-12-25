@@ -7,7 +7,7 @@ import type { Cleaner, CleanerSchedule, CleanerBlockedDate } from '@prisma/clien
 export interface AvailabilityQuery {
   zoneId: string;
   date: Date;
-  startTime: string;  // Format: "HH:MM" (e.g., "09:00")
+  startTime: string; // Format: "HH:MM" (e.g., "09:00")
   durationMinutes: number;
 }
 
@@ -89,7 +89,7 @@ export class AvailabilityService {
 
     // Check 2: Is this date blocked?
     if (cleaner.blockedDates) {
-      const isBlocked = cleaner.blockedDates.some(blocked => {
+      const isBlocked = cleaner.blockedDates.some((blocked) => {
         const blockedDate = new Date(blocked.date);
         return this.isSameDay(blockedDate, date);
       });
@@ -105,7 +105,7 @@ export class AvailabilityService {
     }
 
     // Check 3: Get schedule for this day
-    const schedule = cleaner.schedule?.find(s => s.dayOfWeek === day);
+    const schedule = cleaner.schedule?.find((s) => s.dayOfWeek === day);
 
     if (!schedule || !schedule.isAvailable) {
       return {
@@ -230,7 +230,7 @@ export class AvailabilityService {
     }
 
     // Check if date is blocked
-    const isBlocked = cleaner.blockedDates.some(blocked =>
+    const isBlocked = cleaner.blockedDates.some((blocked) =>
       this.isSameDay(new Date(blocked.date), date)
     );
 
@@ -261,8 +261,8 @@ export class AvailabilityService {
 
     // Build list of busy periods
     const busyPeriods: Array<{ start: number; end: number }> = jobs
-      .filter(job => job.scheduledTime && job.estimatedDurationMinutes)
-      .map(job => ({
+      .filter((job) => job.scheduledTime && job.estimatedDurationMinutes)
+      .map((job) => ({
         start: this.timeToMinutes(job.scheduledTime!),
         end: this.timeToMinutes(job.scheduledTime!) + job.estimatedDurationMinutes!,
       }));
@@ -276,7 +276,10 @@ export class AvailabilityService {
 
       // Check if this slot conflicts with any busy period
       const hasConflict = busyPeriods.some(
-        busy => (time >= busy.start && time < busy.end) || (slotEnd > busy.start && slotEnd <= busy.end) || (time <= busy.start && slotEnd >= busy.end)
+        (busy) =>
+          (time >= busy.start && time < busy.end) ||
+          (slotEnd > busy.start && slotEnd <= busy.end) ||
+          (time <= busy.start && slotEnd >= busy.end)
       );
 
       if (!hasConflict) {
@@ -326,4 +329,3 @@ export class AvailabilityService {
 
 // Export singleton instance
 export const availabilityService = new AvailabilityService();
-

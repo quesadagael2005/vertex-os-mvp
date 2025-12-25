@@ -29,11 +29,9 @@ export class ChecklistService {
     const { jobId, taskIds } = input;
 
     // Get task details
-    const tasks = await Promise.all(
-      taskIds.map(id => taskLibraryService.getTaskById(id))
-    );
+    const tasks = await Promise.all(taskIds.map((id) => taskLibraryService.getTaskById(id)));
 
-    const validTasks = tasks.filter(t => t !== null);
+    const validTasks = tasks.filter((t) => t !== null);
 
     if (validTasks.length === 0) {
       throw new Error('No valid tasks provided for checklist');
@@ -41,10 +39,7 @@ export class ChecklistService {
 
     // Calculate totals
     const totalTasks = validTasks.length;
-    const estimatedMinutes = validTasks.reduce(
-      (sum, task) => sum + (task?.effortMinutes || 0),
-      0
-    );
+    const estimatedMinutes = validTasks.reduce((sum, task) => sum + (task?.effortMinutes || 0), 0);
 
     // Create checklist with items
     const checklist = await prisma.checklist.create({
@@ -152,7 +147,7 @@ export class ChecklistService {
       select: { isCompleted: true },
     });
 
-    const completedCount = items.filter(item => item.isCompleted).length;
+    const completedCount = items.filter((item) => item.isCompleted).length;
     const totalCount = items.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -248,10 +243,7 @@ export class ChecklistService {
   /**
    * Reorder checklist items
    */
-  async reorderItems(
-    checklistId: string,
-    itemIds: string[]
-  ): Promise<void> {
+  async reorderItems(checklistId: string, itemIds: string[]): Promise<void> {
     // Update each item's order
     await Promise.all(
       itemIds.map((itemId, index) =>
@@ -294,17 +286,14 @@ export class ChecklistService {
       progress: checklist.progress,
       estimatedMinutes: checklist.estimatedMinutes,
       actualMinutes: checklist.actualMinutes,
-      remainingTasks: checklist.items.map(item => item.taskName),
+      remainingTasks: checklist.items.map((item) => item.taskName),
     };
   }
 
   /**
    * Mark checklist as complete and record actual time
    */
-  async completeChecklist(
-    checklistId: string,
-    actualMinutes: number
-  ): Promise<void> {
+  async completeChecklist(checklistId: string, actualMinutes: number): Promise<void> {
     await prisma.checklist.update({
       where: { id: checklistId },
       data: {
@@ -317,4 +306,3 @@ export class ChecklistService {
 
 // Export singleton instance
 export const checklistService = new ChecklistService();
-

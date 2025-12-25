@@ -7,20 +7,20 @@ import { Clock } from 'lucide-react';
 export default async function TasksPage() {
   // Fetch tasks
   const tasks = await prisma.task.findMany({
-    orderBy: [
-      { roomType: 'asc' },
-      { name: 'asc' },
-    ],
+    orderBy: [{ roomType: 'asc' }, { name: 'asc' }],
   });
 
   // Group tasks by room type
-  const tasksByRoom = tasks.reduce((acc, task) => {
-    if (!acc[task.roomType]) {
-      acc[task.roomType] = [];
-    }
-    acc[task.roomType].push(task);
-    return acc;
-  }, {} as Record<string, typeof tasks>);
+  const tasksByRoom = tasks.reduce(
+    (acc, task) => {
+      if (!acc[task.roomType]) {
+        acc[task.roomType] = [];
+      }
+      acc[task.roomType].push(task);
+      return acc;
+    },
+    {} as Record<string, typeof tasks>
+  );
 
   const roomTypes = Object.keys(tasksByRoom).sort();
 
@@ -46,13 +46,9 @@ export default async function TasksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Task Library</h1>
-          <p className="text-muted-foreground">
-            Manage available cleaning tasks by room type
-          </p>
+          <p className="text-muted-foreground">Manage available cleaning tasks by room type</p>
         </div>
-        <Button className="bg-primary">
-          + Add Task
-        </Button>
+        <Button className="bg-primary">+ Add Task</Button>
       </div>
 
       {/* Stats */}
@@ -60,7 +56,7 @@ export default async function TasksPage() {
         {roomTypes.map((roomType) => (
           <Card key={roomType} className="p-4">
             <div className="text-center">
-              <p className="text-3xl mb-2">{roomIcons[roomType]}</p>
+              <p className="mb-2 text-3xl">{roomIcons[roomType]}</p>
               <p className="text-sm text-gray-500">{roomNames[roomType]}</p>
               <p className="text-2xl font-bold">{tasksByRoom[roomType].length}</p>
               <p className="text-xs text-gray-500">tasks</p>
@@ -72,11 +68,11 @@ export default async function TasksPage() {
       {/* Tasks by Room */}
       {roomTypes.map((roomType) => (
         <Card key={roomType}>
-          <div className="p-6 border-b bg-gray-50 dark:bg-gray-800">
+          <div className="border-b bg-gray-50 p-6 dark:bg-gray-800">
             <div className="flex items-center gap-3">
               <span className="text-3xl">{roomIcons[roomType]}</span>
               <div>
-                <h3 className="font-semibold text-lg">{roomNames[roomType]}</h3>
+                <h3 className="text-lg font-semibold">{roomNames[roomType]}</h3>
                 <p className="text-sm text-gray-500">
                   {tasksByRoom[roomType].length} available tasks
                 </p>
@@ -88,11 +84,11 @@ export default async function TasksPage() {
             {tasksByRoom[roomType].map((task) => (
               <div
                 key={task.id}
-                className="p-6 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="p-6 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                    <div className="mb-2 flex items-center gap-3">
                       <h4 className="font-semibold">{task.name}</h4>
                       {task.category && (
                         <Badge variant="outline" className="text-xs">
@@ -102,7 +98,7 @@ export default async function TasksPage() {
                     </div>
 
                     {task.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
                         {task.description}
                       </p>
                     )}
@@ -139,4 +135,3 @@ export default async function TasksPage() {
     </div>
   );
 }
-

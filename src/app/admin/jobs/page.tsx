@@ -47,9 +47,7 @@ export default async function JobsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-          <p className="text-muted-foreground">
-            Manage all cleaning jobs and assignments
-          </p>
+          <p className="text-muted-foreground">Manage all cleaning jobs and assignments</p>
         </div>
         <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90">
           + New Job
@@ -111,13 +109,8 @@ export default async function JobsPage() {
             </thead>
             <tbody className="divide-y">
               {jobs.map((job) => (
-                <tr
-                  key={job.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                >
-                  <td className="px-6 py-4 text-sm font-medium">
-                    {job.id.substring(0, 8)}
-                  </td>
+                <tr key={job.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-6 py-4 text-sm font-medium">{job.id.substring(0, 8)}</td>
                   <td className="px-6 py-4 text-sm">
                     <div>
                       <p className="font-medium">{job.member.email}</p>
@@ -136,9 +129,7 @@ export default async function JobsPage() {
                   <td className="px-6 py-4 text-sm">
                     <div>
                       <p className="text-xs text-gray-500">{job.addressZip}</p>
-                      <p className="text-xs text-gray-400 truncate max-w-xs">
-                        {job.addressFull}
-                      </p>
+                      <p className="max-w-xs truncate text-xs text-gray-400">{job.addressFull}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm">
@@ -160,19 +151,12 @@ export default async function JobsPage() {
             Showing 1-{jobs.length} of {jobs.length} jobs
           </p>
           <div className="flex gap-2">
-            <button className="rounded border px-3 py-1 text-sm hover:bg-gray-50">
-              Previous
-            </button>
-            <button className="rounded border bg-primary px-3 py-1 text-sm text-white">
-              1
-            </button>
-            <button className="rounded border px-3 py-1 text-sm hover:bg-gray-50">
-              Next
-            </button>
+            <button className="rounded border px-3 py-1 text-sm hover:bg-gray-50">Previous</button>
+            <button className="rounded border bg-primary px-3 py-1 text-sm text-white">1</button>
+            <button className="rounded border px-3 py-1 text-sm hover:bg-gray-50">Next</button>
           </div>
         </div>
       </Card>
     </div>
   );
 }
-

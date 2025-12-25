@@ -32,7 +32,7 @@ export default async function PayoutsPage() {
   });
 
   // Filter to jobs that don't have a completed payout transaction
-  const jobsNeedingPayout = completedJobs.filter(job => job.transactions.length === 0);
+  const jobsNeedingPayout = completedJobs.filter((job) => job.transactions.length === 0);
 
   const pendingAmount = jobsNeedingPayout.reduce(
     (sum, job) => sum + Number(job.cleanerPayout) * 100,
@@ -58,13 +58,9 @@ export default async function PayoutsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payouts</h1>
-          <p className="text-muted-foreground">
-            Manage cleaner payouts and batch processing
-          </p>
+          <p className="text-muted-foreground">Manage cleaner payouts and batch processing</p>
         </div>
-        <Button className="bg-primary">
-          🚀 Run Payout Batch
-        </Button>
+        <Button className="bg-primary">🚀 Run Payout Batch</Button>
       </div>
 
       {/* Stats */}
@@ -73,13 +69,11 @@ export default async function PayoutsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Pending Payouts</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {formatCurrency(pendingAmount)}
-              </p>
+              <p className="text-2xl font-bold text-yellow-600">{formatCurrency(pendingAmount)}</p>
             </div>
             <Clock className="h-8 w-8 text-yellow-600" />
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="mt-2 text-xs text-gray-500">
             {jobsNeedingPayout.length} jobs awaiting payout
           </p>
         </Card>
@@ -105,14 +99,13 @@ export default async function PayoutsPage() {
             </div>
             <DollarSign className="h-8 w-8 text-green-600" />
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="mt-2 text-xs text-gray-500">
             {
               batches.filter((b) => {
                 const date = new Date(b.createdAt);
                 const now = new Date();
                 return (
-                  date.getMonth() === now.getMonth() &&
-                  date.getFullYear() === now.getFullYear()
+                  date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
                 );
               }).length
             }{' '}
@@ -130,7 +123,7 @@ export default async function PayoutsPage() {
             </div>
             <CheckCircle className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-xs text-gray-500 mt-2">All time</p>
+          <p className="mt-2 text-xs text-gray-500">All time</p>
         </Card>
 
         <Card className="p-6">
@@ -153,10 +146,10 @@ export default async function PayoutsPage() {
       {/* Pending Payouts */}
       {jobsNeedingPayout.length > 0 && (
         <Card>
-          <div className="p-6 border-b bg-yellow-50 dark:bg-yellow-900/10">
+          <div className="border-b bg-yellow-50 p-6 dark:bg-yellow-900/10">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-lg">⚠️ Pending Payouts</h3>
+                <h3 className="text-lg font-semibold">⚠️ Pending Payouts</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {jobsNeedingPayout.length} completed jobs ready for payout
                 </p>
@@ -169,7 +162,7 @@ export default async function PayoutsPage() {
               {jobsNeedingPayout.slice(0, 5).map((job) => (
                 <div
                   key={job.id}
-                  className="flex items-center justify-between py-2 border-b last:border-0"
+                  className="flex items-center justify-between border-b py-2 last:border-0"
                 >
                   <div>
                     <p className="font-medium">
@@ -183,7 +176,7 @@ export default async function PayoutsPage() {
                 </div>
               ))}
               {jobsNeedingPayout.length > 5 && (
-                <p className="text-sm text-gray-500 pt-2">
+                <p className="pt-2 text-sm text-gray-500">
                   + {jobsNeedingPayout.length - 5} more jobs
                 </p>
               )}
@@ -194,8 +187,8 @@ export default async function PayoutsPage() {
 
       {/* Payout History */}
       <Card>
-        <div className="p-6 border-b">
-          <h3 className="font-semibold text-lg">Payout History</h3>
+        <div className="border-b p-6">
+          <h3 className="text-lg font-semibold">Payout History</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -222,17 +215,15 @@ export default async function PayoutsPage() {
               {batches.map((batch) => (
                 <tr
                   key={batch.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  <td className="px-6 py-4 text-sm font-medium">
-                    {batch.id.substring(0, 8)}
-                  </td>
+                  <td className="px-6 py-4 text-sm font-medium">{batch.id.substring(0, 8)}</td>
                   <td className="px-6 py-4 text-sm">{formatDate(batch.createdAt)}</td>
                   <td className="px-6 py-4 text-sm font-bold text-green-600">
                     {formatCurrency(batch.totalCents)}
                   </td>
                   <td className="px-6 py-4">{getStatusBadge(batch.status)}</td>
-                  <td className="px-6 py-4 text-sm font-mono text-xs">
+                  <td className="px-6 py-4 font-mono text-sm text-xs">
                     {batch.stripeTransferId || '-'}
                   </td>
                 </tr>
@@ -244,4 +235,3 @@ export default async function PayoutsPage() {
     </div>
   );
 }
-

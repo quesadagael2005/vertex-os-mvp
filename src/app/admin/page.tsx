@@ -51,9 +51,7 @@ export default async function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome to Vertex OS Admin. Here's your overview.
-        </p>
+        <p className="text-muted-foreground">Welcome to Vertex OS Admin. Here&apos;s your overview.</p>
       </div>
 
       {/* Stats Grid */}
@@ -61,14 +59,12 @@ export default async function DashboardPage() {
         {statCards.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                 <TrendingUp className="h-3 w-3" />
                 {stat.change}
               </p>
@@ -81,7 +77,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Today's Stats</CardTitle>
+            <CardTitle>Today&apos;s Stats</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
@@ -97,7 +93,7 @@ export default async function DashboardPage() {
               <span className="font-semibold">{todayStats.completedJobs}</span>
             </div>
             <div className="flex items-center justify-between border-t pt-2">
-              <span className="text-sm font-medium">Today's Revenue</span>
+              <span className="text-sm font-medium">Today&apos;s Revenue</span>
               <span className="font-bold text-green-600">
                 {formatCurrency(todayStats.revenueCents)}
               </span>
@@ -110,13 +106,13 @@ export default async function DashboardPage() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium transition-colors hover:bg-gray-50">
               + New Job
             </button>
-            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium transition-colors hover:bg-gray-50">
               Approve Cleaners
             </button>
-            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <button className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium transition-colors hover:bg-gray-50">
               Run Payouts
             </button>
           </CardContent>
@@ -130,7 +126,10 @@ export default async function DashboardPage() {
             {metrics.cleaners.topCleaners.slice(0, 3).map((cleaner) => (
               <div key={cleaner.id} className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {cleaner.name.split(' ').map(n => n[0]).join('')}
+                  {cleaner.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')}
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">{cleaner.name}</p>
@@ -146,4 +145,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

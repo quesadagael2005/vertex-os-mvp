@@ -20,10 +20,7 @@ export class TaskLibraryService {
         roomType,
         isActive: true,
       },
-      orderBy: [
-        { defaultOrder: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ defaultOrder: 'asc' }, { name: 'asc' }],
     });
   }
 
@@ -34,11 +31,7 @@ export class TaskLibraryService {
   async getAllTasksByRoomType(): Promise<Record<string, Task[]>> {
     const tasks = await prisma.task.findMany({
       where: { isActive: true },
-      orderBy: [
-        { roomType: 'asc' },
-        { defaultOrder: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ roomType: 'asc' }, { defaultOrder: 'asc' }, { name: 'asc' }],
     });
 
     const result: Record<string, Task[]> = {};
@@ -86,10 +79,7 @@ export class TaskLibraryService {
           },
         ],
       },
-      orderBy: [
-        { roomType: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ roomType: 'asc' }, { name: 'asc' }],
     });
   }
 
@@ -105,7 +95,7 @@ export class TaskLibraryService {
       orderBy: { roomType: 'asc' },
     });
 
-    return tasks.map(t => t.roomType);
+    return tasks.map((t) => t.roomType);
   }
 
   /**
@@ -204,4 +194,3 @@ export class TaskLibraryService {
 
 // Export singleton instance
 export const taskLibraryService = new TaskLibraryService();
-

@@ -54,10 +54,7 @@ export class MetricsService {
   /**
    * Get comprehensive dashboard metrics
    */
-  async getDashboardMetrics(
-    startDate: Date,
-    endDate: Date
-  ): Promise<DashboardMetrics> {
+  async getDashboardMetrics(startDate: Date, endDate: Date): Promise<DashboardMetrics> {
     const [revenue, bookings, cleaners, customers] = await Promise.all([
       this.getRevenueMetrics(startDate, endDate),
       this.getBookingMetrics(startDate, endDate),
@@ -76,10 +73,7 @@ export class MetricsService {
   /**
    * Get revenue metrics for period
    */
-  async getRevenueMetrics(
-    startDate: Date,
-    endDate: Date
-  ): Promise<RevenueMetrics> {
+  async getRevenueMetrics(startDate: Date, endDate: Date): Promise<RevenueMetrics> {
     const jobs = await prisma.job.findMany({
       where: {
         status: 'COMPLETED',
@@ -96,7 +90,10 @@ export class MetricsService {
     });
 
     const totalRevenueCents = jobs.reduce((sum, job) => sum + Number(job.totalPrice) * 100, 0);
-    const platformRevenueCents = jobs.reduce((sum, job) => sum + Number(job.platformFeeAmount) * 100, 0);
+    const platformRevenueCents = jobs.reduce(
+      (sum, job) => sum + Number(job.platformFeeAmount) * 100,
+      0
+    );
     const cleanerPayoutsCents = jobs.reduce((sum, job) => sum + Number(job.cleanerPayout) * 100, 0);
     const jobCount = jobs.length;
     const averageJobValueCents = jobCount > 0 ? Math.round(totalRevenueCents / jobCount) : 0;
@@ -115,10 +112,7 @@ export class MetricsService {
   /**
    * Get booking metrics for period
    */
-  async getBookingMetrics(
-    startDate: Date,
-    endDate: Date
-  ): Promise<BookingMetrics> {
+  async getBookingMetrics(startDate: Date, endDate: Date): Promise<BookingMetrics> {
     const jobs = await prisma.job.findMany({
       where: {
         createdAt: {
@@ -130,17 +124,15 @@ export class MetricsService {
     });
 
     const totalBookings = jobs.length;
-    const completedBookings = jobs.filter(j => j.status === 'completed').length;
-    const cancelledBookings = jobs.filter(j => j.status === 'cancelled').length;
-    const inProgressBookings = jobs.filter(j => j.status === 'in_progress').length;
-    const scheduledBookings = jobs.filter(j => j.status === 'scheduled').length;
+    const completedBookings = jobs.filter((j) => j.status === 'completed').length;
+    const cancelledBookings = jobs.filter((j) => j.status === 'cancelled').length;
+    const inProgressBookings = jobs.filter((j) => j.status === 'in_progress').length;
+    const scheduledBookings = jobs.filter((j) => j.status === 'scheduled').length;
 
-    const completionRate = totalBookings > 0 
-      ? Math.round((completedBookings / totalBookings) * 100) 
-      : 0;
-    const cancellationRate = totalBookings > 0
-      ? Math.round((cancelledBookings / totalBookings) * 100)
-      : 0;
+    const completionRate =
+      totalBookings > 0 ? Math.round((completedBookings / totalBookings) * 100) : 0;
+    const cancellationRate =
+      totalBookings > 0 ? Math.round((cancelledBookings / totalBookings) * 100) : 0;
 
     return {
       totalBookings,
@@ -169,15 +161,14 @@ export class MetricsService {
     });
 
     const totalCleaners = cleaners.length;
-    const activeCleaners = cleaners.filter(c => c.status === 'ACTIVE').length;
-    
+    const activeCleaners = cleaners.filter((c) => c.status === 'ACTIVE').length;
+
     const ratingsSum = cleaners.reduce((sum, c) => sum + Number(c.ratingAverage), 0);
-    const averageRating = totalCleaners > 0 
-      ? Math.round((ratingsSum / totalCleaners) * 10) / 10 
-      : 0;
+    const averageRating =
+      totalCleaners > 0 ? Math.round((ratingsSum / totalCleaners) * 10) / 10 : 0;
 
     const topCleaners = cleaners
-      .filter(c => c.status === 'ACTIVE')
+      .filter((c) => c.status === 'ACTIVE')
       .sort((a, b) => {
         // Sort by rating first, then by completed jobs
         if (b.ratingAverage !== a.ratingAverage) {
@@ -186,7 +177,7 @@ export class MetricsService {
         return b.jobsCompleted - a.jobsCompleted;
       })
       .slice(0, 5)
-      .map(c => ({
+      .map((c) => ({
         id: c.id,
         name: `${c.firstName} ${c.lastName}`,
         rating: Number(c.ratingAverage),
@@ -204,10 +195,7 @@ export class MetricsService {
   /**
    * Get customer metrics for period
    */
-  async getCustomerMetrics(
-    startDate: Date,
-    endDate: Date
-  ): Promise<CustomerMetrics> {
+  async getCustomerMetrics(startDate: Date, endDate: Date): Promise<CustomerMetrics> {
     // Total members
     const totalMembers = await prisma.member.count();
 
@@ -241,9 +229,8 @@ export class MetricsService {
     const jobCount = await prisma.job.count({
       where: { status: 'COMPLETED' },
     });
-    const averageJobsPerMember = totalMembers > 0 
-      ? Math.round((jobCount / totalMembers) * 10) / 10 
-      : 0;
+    const averageJobsPerMember =
+      totalMembers > 0 ? Math.round((jobCount / totalMembers) * 10) / 10 : 0;
 
     // Repeat customer rate (members with 2+ completed jobs)
     const memberJobCounts = await prisma.job.groupBy({
@@ -252,10 +239,9 @@ export class MetricsService {
       _count: { memberId: true },
     });
 
-    const repeatCustomers = memberJobCounts.filter(m => m._count.memberId >= 2).length;
-    const repeatCustomerRate = totalMembers > 0
-      ? Math.round((repeatCustomers / totalMembers) * 100)
-      : 0;
+    const repeatCustomers = memberJobCounts.filter((m) => m._count.memberId >= 2).length;
+    const repeatCustomerRate =
+      totalMembers > 0 ? Math.round((repeatCustomers / totalMembers) * 100) : 0;
 
     return {
       totalMembers,
@@ -293,13 +279,13 @@ export class MetricsService {
 
     for (const job of jobs) {
       if (!job.completedAt) continue;
-      
+
       const date = job.completedAt.toISOString().split('T')[0]; // YYYY-MM-DD
-      
+
       if (!dailyRevenue.has(date)) {
         dailyRevenue.set(date, { revenueCents: 0, jobCount: 0 });
       }
-      
+
       const day = dailyRevenue.get(date)!;
       day.revenueCents += Number(job.totalPrice) * 100;
       day.jobCount += 1;
@@ -347,7 +333,10 @@ export class MetricsService {
     });
 
     // Group by zone
-    const zoneMetrics = new Map<string, { zoneName: string; jobCount: number; revenueCents: number }>();
+    const zoneMetrics = new Map<
+      string,
+      { zoneName: string; jobCount: number; revenueCents: number }
+    >();
 
     for (const job of jobs) {
       const zoneId = job.zoneId;
@@ -373,13 +362,15 @@ export class MetricsService {
   /**
    * Get top performing cleaners
    */
-  async getTopCleaners(limit: number = 10): Promise<Array<{
-    cleanerId: string;
-    cleanerName: string;
-    jobsCompleted: number;
-    totalRevenueCents: number;
-    averageRating: number;
-  }>> {
+  async getTopCleaners(limit: number = 10): Promise<
+    Array<{
+      cleanerId: string;
+      cleanerName: string;
+      jobsCompleted: number;
+      totalRevenueCents: number;
+      averageRating: number;
+    }>
+  > {
     const cleaners = await prisma.cleaner.findMany({
       where: { status: 'ACTIVE' },
       select: {
@@ -429,7 +420,7 @@ export class MetricsService {
   }> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
@@ -465,4 +456,3 @@ export class MetricsService {
 
 // Export singleton instance
 export const metricsService = new MetricsService();
-

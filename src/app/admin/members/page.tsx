@@ -32,9 +32,7 @@ export default async function MembersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Members</h1>
-          <p className="text-muted-foreground">
-            Manage customer memberships and profiles
-          </p>
+          <p className="text-muted-foreground">Manage customer memberships and profiles</p>
         </div>
         <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90">
           + Add Member
@@ -49,9 +47,7 @@ export default async function MembersPage() {
         </Card>
         <Card className="p-4">
           <p className="text-sm text-gray-500">VIP Members</p>
-          <p className="text-2xl font-bold">
-            {members.filter((m) => m.tier === 'VIP').length}
-          </p>
+          <p className="text-2xl font-bold">{members.filter((m) => m.tier === 'VIP').length}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-gray-500">New This Month</p>
@@ -61,8 +57,7 @@ export default async function MembersPage() {
                 const date = new Date(m.createdAt);
                 const now = new Date();
                 return (
-                  date.getMonth() === now.getMonth() &&
-                  date.getFullYear() === now.getFullYear()
+                  date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
                 );
               }).length
             }
@@ -90,18 +85,16 @@ export default async function MembersPage() {
       {/* Members Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {members.map((member) => (
-          <Card key={member.id} className="p-6 hover:shadow-lg transition-shadow cursor-pointer">
+          <Card key={member.id} className="cursor-pointer p-6 transition-shadow hover:shadow-lg">
             <div className="space-y-4">
               {/* Header */}
               <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
                     {member.email[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold">
-                      {member.email}
-                    </p>
+                    <p className="font-semibold">{member.email}</p>
                     {getTierBadge(member.tier)}
                   </div>
                 </div>
@@ -119,18 +112,14 @@ export default async function MembersPage() {
                 </div>
                 <div className="flex items-center gap-2 text-gray-600">
                   <MapPin className="h-4 w-4" />
-                  <span className="truncate">
-                    {member.addressZip}
-                  </span>
+                  <span className="truncate">{member.addressZip}</span>
                 </div>
               </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t pt-4 text-xs text-gray-500">
                 <span>Joined {formatDate(member.createdAt)}</span>
-                <button className="text-primary hover:underline">
-                  View Profile →
-                </button>
+                <button className="text-primary hover:underline">View Profile →</button>
               </div>
             </div>
           </Card>
@@ -139,4 +128,3 @@ export default async function MembersPage() {
     </div>
   );
 }
-

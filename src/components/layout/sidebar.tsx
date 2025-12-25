@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  Users, 
+import {
+  LayoutDashboard,
+  Briefcase,
+  Users,
   Sparkles,
   DollarSign,
   FileText,
@@ -13,7 +13,7 @@ import {
   BookOpen,
   Map,
   Settings,
-  LogOut
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,9 +48,9 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = pathname === item.href || 
-            (item.href !== '/admin' && pathname?.startsWith(item.href));
-          
+          const isActive =
+            pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(item.href));
+
           return (
             <Link
               key={item.name}
@@ -90,4 +90,3 @@ export function Sidebar() {
     </div>
   );
 }
-

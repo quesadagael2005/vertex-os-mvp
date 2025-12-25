@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { prisma } from '@/lib/db/client';
 import { formatDate, calculatePercentage } from '@/lib/utils';
-import { Target, TrendingDown, Phone, Mail } from 'lucide-react';
+import { TrendingDown, Phone, Mail } from 'lucide-react';
 
 export default async function LeadsPage() {
   // Fetch leads
@@ -66,19 +66,17 @@ export default async function LeadsPage() {
             Track conversion funnel and follow up on abandoned leads
           </p>
         </div>
-        <Button className="bg-primary">
-          + Add Lead
-        </Button>
+        <Button className="bg-primary">+ Add Lead</Button>
       </div>
 
       {/* Conversion Funnel */}
       <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-4">📊 Conversion Funnel</h3>
+        <h3 className="mb-4 text-lg font-semibold">📊 Conversion Funnel</h3>
         <div className="space-y-2">
           {/* Total Leads */}
           <div className="flex items-center gap-4">
             <div
-              className="h-12 bg-gray-300 dark:bg-gray-700 rounded flex items-center justify-center text-sm font-semibold"
+              className="flex h-12 items-center justify-center rounded bg-gray-300 text-sm font-semibold dark:bg-gray-700"
               style={{ width: '100%' }}
             >
               {totalLeads} Total Leads
@@ -88,7 +86,7 @@ export default async function LeadsPage() {
           {/* In Progress */}
           <div className="flex items-center gap-4">
             <div
-              className="h-10 bg-yellow-400 rounded flex items-center justify-center text-sm font-semibold text-white"
+              className="flex h-10 items-center justify-center rounded bg-yellow-400 text-sm font-semibold text-white"
               style={{
                 width: `${calculatePercentage(funnelStats.inProgress, totalLeads)}%`,
                 minWidth: '150px',
@@ -102,7 +100,7 @@ export default async function LeadsPage() {
           {/* Completed */}
           <div className="flex items-center gap-4">
             <div
-              className="h-10 bg-blue-400 rounded flex items-center justify-center text-sm font-semibold text-white"
+              className="flex h-10 items-center justify-center rounded bg-blue-400 text-sm font-semibold text-white"
               style={{
                 width: `${calculatePercentage(funnelStats.completed, totalLeads)}%`,
                 minWidth: '150px',
@@ -116,7 +114,7 @@ export default async function LeadsPage() {
           {/* Converted */}
           <div className="flex items-center gap-4">
             <div
-              className="h-10 bg-green-500 rounded flex items-center justify-center text-sm font-semibold text-white"
+              className="flex h-10 items-center justify-center rounded bg-green-500 text-sm font-semibold text-white"
               style={{
                 width: `${calculatePercentage(funnelStats.converted, totalLeads)}%`,
                 minWidth: '150px',
@@ -129,7 +127,7 @@ export default async function LeadsPage() {
           {/* Abandoned */}
           <div className="flex items-center gap-4">
             <div
-              className="h-10 bg-red-400 rounded flex items-center justify-center text-sm font-semibold text-white"
+              className="flex h-10 items-center justify-center rounded bg-red-400 text-sm font-semibold text-white"
               style={{
                 width: `${calculatePercentage(funnelStats.abandoned, totalLeads)}%`,
                 minWidth: '150px',
@@ -141,7 +139,7 @@ export default async function LeadsPage() {
           </div>
         </div>
 
-        <div className="mt-4 p-4 bg-primary/10 rounded-lg">
+        <div className="mt-4 rounded-lg bg-primary/10 p-4">
           <p className="text-sm font-semibold">
             Overall Conversion Rate: <span className="text-2xl">{conversionRate}%</span>
           </p>
@@ -153,18 +151,16 @@ export default async function LeadsPage() {
         <Card className="border-l-4 border-l-red-500">
           <div className="p-6">
             <div className="flex items-start gap-4">
-              <TrendingDown className="h-6 w-6 text-red-500 mt-1" />
+              <TrendingDown className="mt-1 h-6 w-6 text-red-500" />
               <div className="flex-1">
-                <h3 className="font-semibold text-lg text-red-600">
+                <h3 className="text-lg font-semibold text-red-600">
                   ⚠️ {abandonedLeads.length} Abandoned Leads
                 </h3>
                 <p className="text-sm text-gray-600">
-                  These leads haven't been contacted in over 3 days. Follow up to re-engage!
+                  These leads haven&apos;t been contacted in over 3 days. Follow up to re-engage!
                 </p>
               </div>
-              <Button variant="outline">
-                Send Bulk Email
-              </Button>
+              <Button variant="outline">Send Bulk Email</Button>
             </div>
           </div>
         </Card>
@@ -172,8 +168,8 @@ export default async function LeadsPage() {
 
       {/* Abandoned Leads Table */}
       <Card>
-        <div className="p-6 border-b">
-          <h3 className="font-semibold text-lg">🔍 Abandoned Leads (Need Follow-up)</h3>
+        <div className="border-b p-6">
+          <h3 className="text-lg font-semibold">🔍 Abandoned Leads (Need Follow-up)</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -203,29 +199,20 @@ export default async function LeadsPage() {
               {abandonedLeads.slice(0, 20).map((lead) => {
                 const idleDays = getIdleDays(lead.updatedAt);
                 return (
-                  <tr
-                    key={lead.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-medium">{lead.email}</p>
-                      {lead.phone && (
-                        <p className="text-xs text-gray-500">{lead.phone}</p>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">{getStatusBadge(lead.status)}</td>
-                  <td className="px-6 py-4 text-sm">{lead.addressZip || '-'}</td>
+                  <tr key={lead.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-medium">{lead.email}</p>
+                        {lead.phone && <p className="text-xs text-gray-500">{lead.phone}</p>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">{getStatusBadge(lead.status)}</td>
+                    <td className="px-6 py-4 text-sm">{lead.addressZip || '-'}</td>
                     <td className="px-6 py-4 text-sm">{formatDate(lead.updatedAt)}</td>
                     <td className="px-6 py-4">
                       <Badge
                         variant={
-                          idleDays > 14
-                            ? 'destructive'
-                            : idleDays > 7
-                            ? 'warning'
-                            : 'secondary'
+                          idleDays > 14 ? 'destructive' : idleDays > 7 ? 'warning' : 'secondary'
                         }
                       >
                         {idleDays}d
@@ -234,11 +221,11 @@ export default async function LeadsPage() {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline">
-                          <Phone className="h-3 w-3 mr-1" />
+                          <Phone className="mr-1 h-3 w-3" />
                           Call
                         </Button>
                         <Button size="sm" variant="outline">
-                          <Mail className="h-3 w-3 mr-1" />
+                          <Mail className="mr-1 h-3 w-3" />
                           Email
                         </Button>
                       </div>
@@ -253,4 +240,3 @@ export default async function LeadsPage() {
     </div>
   );
 }
-

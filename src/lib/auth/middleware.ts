@@ -70,4 +70,3 @@ export function notFoundResponse(message: string = 'Not found') {
 export function serverErrorResponse(message: string = 'Internal server error') {
   return Response.json({ error: message }, { status: 500 });
 }
-

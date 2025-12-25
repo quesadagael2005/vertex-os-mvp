@@ -3,13 +3,17 @@
 
 import { NextRequest } from 'next/server';
 import { metricsService } from '@/lib/services';
-import { requireRole, jsonResponse, errorResponse, unauthorizedResponse } from '@/lib/auth/middleware';
+import {
+  requireRole,
+  jsonResponse,
+  errorResponse,
+  unauthorizedResponse,
+} from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireRole(request, ['admin']);
-    const { searchParams } = new URL(request.url);
-    
+    await requireRole(request, ['admin']);
+
     // Get date range from query params or default to last 30 days
     const endDate = new Date();
     const startDate = new Date();
@@ -28,12 +32,11 @@ export async function GET(request: NextRequest) {
       periodStart: startDate,
       periodEnd: endDate,
     });
-  } catch (error: any) {
-    if (error.message.includes('authentication')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('authentication')) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error fetching dashboard:', error);
     return errorResponse('Failed to fetch dashboard', 500);
   }
 }
-
