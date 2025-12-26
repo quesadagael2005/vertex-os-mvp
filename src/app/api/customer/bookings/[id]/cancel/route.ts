@@ -31,11 +31,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Check if already cancelled or completed
-    if (job.status === 'cancelled') {
+    if (job.status === 'CANCELLED') {
       return errorResponse('Booking is already cancelled');
     }
 
-    if (job.status === 'completed') {
+    if (job.status === 'COMPLETED') {
       return errorResponse('Cannot cancel a completed booking');
     }
 

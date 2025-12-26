@@ -35,11 +35,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Check if can be rescheduled
-    if (job.status === 'cancelled') {
+    if (job.status === 'CANCELLED') {
       return errorResponse('Cannot reschedule a cancelled booking');
     }
 
-    if (job.status === 'completed') {
+    if (job.status === 'COMPLETED') {
       return errorResponse('Cannot reschedule a completed booking');
     }
 
