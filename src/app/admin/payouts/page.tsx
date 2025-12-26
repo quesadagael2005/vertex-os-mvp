@@ -207,7 +207,7 @@ export default async function PayoutsPage() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Stripe Transfer ID
+                  Error Message
                 </th>
               </tr>
             </thead>
