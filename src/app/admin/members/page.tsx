@@ -15,12 +15,10 @@ export default async function MembersPage() {
 
   const getTierBadge = (tier: string) => {
     switch (tier) {
-      case 'VIP':
-        return <Badge className="bg-purple-500 hover:bg-purple-600">VIP</Badge>;
-      case 'Plus':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">Plus</Badge>;
-      case 'Basic':
-        return <Badge variant="secondary">Basic</Badge>;
+      case 'ELITE':
+        return <Badge className="bg-purple-500 hover:bg-purple-600">Elite</Badge>;
+      case 'FREE':
+        return <Badge variant="secondary">Free</Badge>;
       default:
         return <Badge variant="outline">{tier}</Badge>;
     }
@@ -46,8 +44,8 @@ export default async function MembersPage() {
           <p className="text-2xl font-bold">{members.length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-gray-500">VIP Members</p>
-          <p className="text-2xl font-bold">{members.filter((m) => m.tier === 'VIP').length}</p>
+          <p className="text-sm text-gray-500">Elite Members</p>
+          <p className="text-2xl font-bold">{members.filter((m) => m.tier === 'ELITE').length}</p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-gray-500">New This Month</p>
@@ -70,9 +68,8 @@ export default async function MembersPage() {
         <div className="flex gap-4">
           <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
             <option>All Tiers</option>
-            <option>VIP</option>
-            <option>Plus</option>
-            <option>Basic</option>
+            <option>Elite</option>
+            <option>Free</option>
           </select>
           <input
             type="search"
