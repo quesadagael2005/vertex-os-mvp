@@ -24,7 +24,11 @@ export async function GET(request: NextRequest) {
     };
 
     if (status) {
-      where.status = status.toUpperCase() as 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+      where.status = status.toUpperCase() as
+        | 'SCHEDULED'
+        | 'IN_PROGRESS'
+        | 'COMPLETED'
+        | 'CANCELLED';
     }
 
     const jobs = await prisma.job.findMany({
