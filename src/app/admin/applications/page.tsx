@@ -131,7 +131,7 @@ export default async function ApplicationsPage() {
                           {app.firstName} {app.lastName}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {app.city}, {app.state}
+                          {app.addressZip}
                         </p>
                       </div>
                     </div>
