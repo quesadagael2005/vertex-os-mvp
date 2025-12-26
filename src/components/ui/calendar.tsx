@@ -63,10 +63,7 @@ function Calendar({
           defaultClassNames.dropdown_root
         ),
         dropdown: cn('absolute bg-popover inset-0 opacity-0', defaultClassNames.dropdown),
-        caption_label: cn(
-          'select-none font-medium text-sm',
-          defaultClassNames.caption_label
-        ),
+        caption_label: cn('select-none font-medium text-sm', defaultClassNames.caption_label),
         table: 'w-full border-collapse',
         weekdays: cn('flex', defaultClassNames.weekdays),
         weekday: cn(
