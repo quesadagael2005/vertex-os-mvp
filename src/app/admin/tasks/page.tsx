@@ -109,7 +109,6 @@ export default async function TasksPage() {
                         <span className="font-medium">{task.timeMinutes} min</span>
                         <span className="text-gray-500">base effort</span>
                       </div>
-
                     </div>
                   </div>
 
