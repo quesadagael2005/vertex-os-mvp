@@ -34,7 +34,9 @@ export default async function CleanersPage() {
       });
 
       const avgRating =
-        ratings.length > 0 ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length : 0;
+        ratings.length > 0
+          ? ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length
+          : 0;
 
       return {
         ...cleaner,
