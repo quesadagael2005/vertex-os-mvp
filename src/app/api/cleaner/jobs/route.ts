@@ -18,13 +18,13 @@ export async function GET(request: NextRequest) {
 
     const where: {
       cleanerId: string;
-      status?: string;
+      status?: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
     } = {
       cleanerId: user.userId,
     };
 
     if (status) {
-      where.status = status;
+      where.status = status.toUpperCase() as 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
     }
 
     const jobs = await prisma.job.findMany({
@@ -32,8 +32,7 @@ export async function GET(request: NextRequest) {
       include: {
         member: {
           select: {
-            firstName: true,
-            lastName: true,
+            email: true,
             phone: true,
           },
         },
