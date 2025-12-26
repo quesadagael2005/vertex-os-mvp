@@ -31,44 +31,6 @@ function Calendar({
       captionLayout={captionLayout}
       formatters={formatters}
       classNames={{
-        root: 'w-fit',
-        months: 'flex gap-4 flex-col md:flex-row relative',
-        month: 'flex flex-col w-full gap-4',
-        nav: 'flex items-center gap-1 w-full absolute top-0 inset-x-0 justify-between',
-        nav_button_previous: cn(
-          buttonVariants({ variant: buttonVariant }),
-          'size-(--cell-size) aria-disabled:opacity-50 p-0 select-none'
-        ),
-        nav_button_next: cn(
-          buttonVariants({ variant: buttonVariant }),
-          'size-(--cell-size) aria-disabled:opacity-50 p-0 select-none'
-        ),
-        month_caption: 'flex items-center justify-center h-(--cell-size) w-full px-(--cell-size)',
-        dropdowns:
-          'w-full flex items-center text-sm font-medium justify-center h-(--cell-size) gap-1.5',
-        dropdown_root:
-          'relative has-focus:border-ring border border-input shadow-xs has-focus:ring-ring/50 has-focus:ring-[3px] rounded-md',
-        dropdown: 'absolute bg-popover inset-0 opacity-0',
-        caption_label: 'select-none font-medium text-sm',
-        table: 'w-full border-collapse',
-        weekdays: 'flex',
-        weekday: 'text-muted-foreground rounded-md flex-1 font-normal text-[0.8rem] select-none',
-        week: 'flex w-full mt-2',
-        week_number_header: 'select-none w-(--cell-size)',
-        week_number: 'text-[0.8rem] select-none text-muted-foreground',
-        day: cn(
-          'relative w-full h-full p-0 text-center [&:last-child[data-selected=true]_button]:rounded-r-md group/day aspect-square select-none',
-          props.showWeekNumber
-            ? '[&:nth-child(2)[data-selected=true]_button]:rounded-l-md'
-            : '[&:first-child[data-selected=true]_button]:rounded-l-md'
-        ),
-        range_start: 'rounded-l-md bg-accent',
-        range_middle: 'rounded-none',
-        range_end: 'rounded-r-md bg-accent',
-        today: 'bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none',
-        outside: 'text-muted-foreground aria-selected:text-muted-foreground',
-        disabled: 'text-muted-foreground opacity-50',
-        hidden: 'invisible',
         ...classNames,
       }}
       components={{
