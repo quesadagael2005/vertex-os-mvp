@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error creating booking:', error);
-    return errorResponse(error.message || 'Failed to create booking', 500);
+    return errorResponse(error instanceof Error ? error.message : 'Failed to create booking', 500);
   }
 }
 
