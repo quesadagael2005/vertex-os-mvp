@@ -90,9 +90,9 @@ export default async function TasksPage() {
                   <div className="flex-1">
                     <div className="mb-2 flex items-center gap-3">
                       <h4 className="font-semibold">{task.name}</h4>
-                      {task.category && (
+                      {task.roomType && (
                         <Badge variant="outline" className="text-xs">
-                          {task.category}
+                          {task.roomType}
                         </Badge>
                       )}
                     </div>
