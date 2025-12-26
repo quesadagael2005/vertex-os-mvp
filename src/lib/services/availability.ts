@@ -40,7 +40,7 @@ export class AvailabilityService {
         zones: {
           where: { zoneId },
         },
-        schedule: true,
+        schedules: true,
         blockedDates: true,
       },
     });
@@ -67,7 +67,7 @@ export class AvailabilityService {
    */
   async checkCleanerAvailability(
     cleaner: Cleaner & {
-      schedule?: CleanerSchedule[];
+      schedules?: CleanerSchedule[];
       blockedDates?: CleanerBlockedDate[];
     },
     date: Date,
@@ -105,7 +105,7 @@ export class AvailabilityService {
     }
 
     // Check 3: Get schedule for this day
-    const schedule = cleaner.schedule?.find((s) => s.dayOfWeek === day);
+    const schedule = cleaner.schedules?.find((s) => s.dayOfWeek === day);
 
     if (!schedule || !schedule.isAvailable) {
       return {
@@ -220,7 +220,7 @@ export class AvailabilityService {
     const cleaner = await prisma.cleaner.findUnique({
       where: { id: cleanerId },
       include: {
-        schedule: { where: { dayOfWeek } },
+        schedules: { where: { dayOfWeek } },
         blockedDates: true,
       },
     });
@@ -234,11 +234,11 @@ export class AvailabilityService {
       this.isSameDay(new Date(blocked.date), date)
     );
 
-    if (isBlocked || !cleaner.schedule[0]?.isAvailable) {
+    if (isBlocked || !cleaner.schedules[0]?.isAvailable) {
       return [];
     }
 
-    const schedule = cleaner.schedule[0];
+    const schedule = cleaner.schedules[0];
     const workStart = this.timeToMinutes(schedule.startTime);
     const workEnd = this.timeToMinutes(schedule.endTime);
 
