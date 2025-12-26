@@ -61,7 +61,7 @@ export class EffortCalculatorService {
         tasks = await taskLibraryService.getTasksByRoomType(room.roomType);
       }
 
-      const minutesPerRoom = tasks.reduce((sum, task) => sum + (task?.effortMinutes || 0), 0);
+      const minutesPerRoom = tasks.reduce((sum, task) => sum + (task?.timeMinutes || 0), 0);
       const totalMinutes = minutesPerRoom * room.quantity;
       baseEffortMinutes += totalMinutes;
 
@@ -73,7 +73,7 @@ export class EffortCalculatorService {
         tasks: tasks.map((task) => ({
           id: task!.id,
           name: task!.name,
-          effortMinutes: task!.effortMinutes,
+          effortMinutes: task!.timeMinutes,
         })),
       });
     }
@@ -124,7 +124,7 @@ export class EffortCalculatorService {
     const tasks = await Promise.all(taskIds.map((id) => taskLibraryService.getTaskById(id)));
 
     const validTasks = tasks.filter((t) => t !== null);
-    const baseEffortMinutes = validTasks.reduce((sum, task) => sum + (task?.effortMinutes || 0), 0);
+    const baseEffortMinutes = validTasks.reduce((sum, task) => sum + (task?.timeMinutes || 0), 0);
 
     // Group tasks by room type for breakdown
     const tasksByRoom: Record<string, typeof validTasks> = {};
@@ -138,7 +138,7 @@ export class EffortCalculatorService {
 
     const breakdown: EffortResult['breakdown'] = [];
     for (const [roomType, roomTasks] of Object.entries(tasksByRoom)) {
-      const totalMinutes = roomTasks.reduce((sum, task) => sum + (task?.effortMinutes || 0), 0);
+      const totalMinutes = roomTasks.reduce((sum, task) => sum + (task?.timeMinutes || 0), 0);
       breakdown.push({
         roomType,
         quantity: 1,
@@ -147,7 +147,7 @@ export class EffortCalculatorService {
         tasks: roomTasks.map((task) => ({
           id: task!.id,
           name: task!.name,
-          effortMinutes: task!.effortMinutes,
+          effortMinutes: task!.timeMinutes,
         })),
       });
     }
@@ -201,7 +201,7 @@ export class EffortCalculatorService {
       const standardRooms = ['living_room', 'kitchen', 'bathroom'];
       for (const room of standardRooms) {
         if (allTasks[room]) {
-          baseEffort += allTasks[room].reduce((sum, task) => sum + task.effortMinutes, 0);
+          baseEffort += allTasks[room].reduce((sum, task) => sum + task.timeMinutes, 0);
         }
       }
       modifier = 1.0;
@@ -210,7 +210,7 @@ export class EffortCalculatorService {
     // Deep clean: all rooms + 50% more effort
     if (jobType === 'deep') {
       for (const room of roomTypes) {
-        baseEffort += allTasks[room].reduce((sum, task) => sum + task.effortMinutes, 0);
+        baseEffort += allTasks[room].reduce((sum, task) => sum + task.timeMinutes, 0);
       }
       modifier = 1.5;
     }
@@ -218,7 +218,7 @@ export class EffortCalculatorService {
     // Move-out: all rooms + 75% more effort
     if (jobType === 'move_out') {
       for (const room of roomTypes) {
-        baseEffort += allTasks[room].reduce((sum, task) => sum + task.effortMinutes, 0);
+        baseEffort += allTasks[room].reduce((sum, task) => sum + task.timeMinutes, 0);
       }
       modifier = 1.75;
     }

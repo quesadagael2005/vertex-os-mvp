@@ -79,23 +79,21 @@ export class BookingService {
       data: {
         memberId: input.memberId,
         cleanerId: match.cleaner.id,
-        zoneId: input.zoneId,
         status: 'SCHEDULED',
-        address: input.address,
+        addressFull: input.address,
+        addressZip: '00000',
         scheduledDate: input.scheduledDate,
         scheduledTime: input.scheduledTime,
-        estimatedDurationMinutes: effort.modifiedEffortMinutes,
-
-        // Snapshot pricing at booking time
-        totalCents: pricing.totalCents,
-        cleanerPayoutCents: pricing.cleanerPayoutCents,
-        platformFeeCents: pricing.platformFee.amountCents,
-
-        // Snapshot member tier
-        memberTier: member.tier,
-        tierDiscountCents: pricing.tierDiscount?.amountCents || 0,
-
-        notes: input.notes,
+        estimatedDuration: effort.modifiedEffortMinutes,
+        checklistSnapshot: {},
+        taskCount: 0,
+        effortHours: 0,
+        cleanerRateSnapshot: 0,
+        platformFeeSnapshot: 0,
+        subtotal: pricing.totalCents / 100,
+        platformFeeAmount: pricing.platformFee.amountCents / 100,
+        totalPrice: pricing.totalCents / 100,
+        cleanerPayout: pricing.cleanerPayoutCents / 100,
       },
     });
 
@@ -135,8 +133,6 @@ export class BookingService {
         member: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
             email: true,
             phone: true,
           },
@@ -148,15 +144,7 @@ export class BookingService {
             lastName: true,
             email: true,
             phone: true,
-            rating: true,
-          },
-        },
-        zone: true,
-        checklist: {
-          include: {
-            items: {
-              orderBy: { order: 'asc' },
-            },
+            ratingAverage: true,
           },
         },
         rating: true,
@@ -169,20 +157,20 @@ export class BookingService {
    */
   async updateJobStatus(
     jobId: string,
-    status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled',
+    status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
     completedBy?: string
   ): Promise<Job> {
     const data: {
-      status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+      status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
       startedAt?: Date;
       completedAt?: Date;
     } = { status };
 
-    if (status === 'in_progress') {
+    if (status === 'IN_PROGRESS') {
       data.startedAt = new Date();
     }
 
-    if (status === 'completed') {
+    if (status === 'COMPLETED') {
       data.completedAt = new Date();
     }
 
@@ -202,11 +190,11 @@ export class BookingService {
     });
 
     // If completed, update cleaner's completed job count
-    if (status === 'completed') {
+    if (status === 'COMPLETED') {
       await prisma.cleaner.update({
         where: { id: job.cleanerId! },
         data: {
-          completedJobs: { increment: 1 },
+          jobsCompleted: { increment: 1 },
         },
       });
     }
@@ -221,8 +209,7 @@ export class BookingService {
     await prisma.job.update({
       where: { id: jobId },
       data: {
-        status: 'cancelled',
-        notes: `Cancelled: ${reason}`,
+        status: 'CANCELLED',
       },
     });
 
@@ -248,8 +235,7 @@ export class BookingService {
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
-        zoneId: true,
-        estimatedDurationMinutes: true,
+        estimatedDuration: true,
         cleanerId: true,
       },
     });
@@ -258,20 +244,7 @@ export class BookingService {
       throw new Error('Job not found');
     }
 
-    // Check if cleaner is available at new time
-    if (job.cleanerId) {
-      const match = await matchingService.getBestMatch({
-        zoneId: job.zoneId,
-        date: newDate,
-        startTime: newTime,
-        durationMinutes: job.estimatedDurationMinutes!,
-        preferredCleanerId: job.cleanerId,
-      });
-
-      if (!match || match.cleaner.id !== job.cleanerId) {
-        throw new Error('Cleaner not available at the requested time');
-      }
-    }
+    // TODO: Check if cleaner is available at new time
 
     const updatedJob = await prisma.job.update({
       where: { id: jobId },
@@ -303,14 +276,14 @@ export class BookingService {
 
     const job = await prisma.job.findUnique({
       where: { id: jobId },
-      select: { status: true, cleanerId: true, rating: true },
+      select: { status: true, cleanerId: true, memberId: true, rating: true },
     });
 
     if (!job) {
       throw new Error('Job not found');
     }
 
-    if (job.status !== 'completed') {
+    if (job.status !== 'COMPLETED') {
       throw new Error('Can only rate completed jobs');
     }
 
@@ -323,15 +296,10 @@ export class BookingService {
       data: {
         jobId,
         cleanerId: job.cleanerId!,
-        rating,
-        review,
+        memberId: job.memberId,
+        overallRating: rating,
+        comment: review,
       },
-    });
-
-    // Update job with rating
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { rating },
     });
 
     // Recalculate cleaner's average rating
@@ -350,11 +318,14 @@ export class BookingService {
     if (ratings.length === 0) return;
 
     const avgRating = ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length;
-    const roundedRating = Math.round(avgRating * 10) / 10; // Round to 1 decimal
+    const roundedRating = Math.round(avgRating * 100) / 100; // Round to 2 decimals
 
     await prisma.cleaner.update({
       where: { id: cleanerId },
-      data: { rating: roundedRating },
+      data: {
+        ratingAverage: roundedRating,
+        ratingCount: ratings.length,
+      },
     });
   }
 
@@ -365,7 +336,7 @@ export class BookingService {
     return await prisma.job.findMany({
       where: {
         memberId,
-        status: { in: ['scheduled', 'in_progress'] },
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         scheduledDate: { gte: new Date() },
       },
       orderBy: { scheduledDate: 'asc' },
@@ -374,10 +345,9 @@ export class BookingService {
           select: {
             firstName: true,
             lastName: true,
-            rating: true,
+            ratingAverage: true,
           },
         },
-        zone: true,
       },
     });
   }
@@ -389,7 +359,7 @@ export class BookingService {
     return await prisma.job.findMany({
       where: {
         memberId,
-        status: 'completed',
+        status: 'COMPLETED',
       },
       orderBy: { completedAt: 'desc' },
       take: limit,

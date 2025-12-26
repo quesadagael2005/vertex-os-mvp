@@ -104,11 +104,11 @@ export class MatchingService {
 
     // Factor 3: Rating (max 20 points)
     // Rating is 0-5, normalize to 0-20
-    score += (cleaner.rating / 5) * 20;
+    score += (Number(cleaner.ratingAverage) / 5) * 20;
 
     // Factor 4: Experience (max 10 points)
     // More completed jobs = more experience
-    const experienceScore = Math.min(cleaner.completedJobs / 10, 10);
+    const experienceScore = Math.min(cleaner.jobsCompleted / 10, 10);
     score += experienceScore;
 
     // Factor 5: Current workload (deduct up to 10 points)
