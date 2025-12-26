@@ -174,7 +174,7 @@ export default async function CleanersPage() {
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1 text-lg font-bold text-green-600">
                     <DollarSign className="h-4 w-4" />
-                    {cleaner.payRateCents / 100}
+                    {Number(cleaner.hourlyRate).toFixed(2)}
                   </div>
                   <p className="text-xs text-gray-500">/hour</p>
                 </div>
