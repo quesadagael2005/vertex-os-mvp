@@ -73,7 +73,7 @@ export default async function ZonesPage() {
       {/* Zones Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {zones.map((zone) => {
-          const activeCleaners = zone.cleaners.filter((c) => c.cleaner.status === 'active').length;
+          const activeCleaners = zone.cleaners.filter((c) => c.cleaner.status === 'ACTIVE').length;
           const totalJobs = zone.cleaners.reduce((sum, c) => sum + c.cleaner._count.jobs, 0);
 
           return (
