@@ -344,7 +344,7 @@ export class BookingService {
   private async updateCleanerRating(cleanerId: string): Promise<void> {
     const ratings = await prisma.rating.findMany({
       where: { cleanerId },
-      select: { rating: true },
+      select: { overallRating: true },
     });
 
     if (ratings.length === 0) return;
