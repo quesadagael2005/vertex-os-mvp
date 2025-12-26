@@ -349,7 +349,7 @@ export class BookingService {
 
     if (ratings.length === 0) return;
 
-    const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+    const avgRating = ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length;
     const roundedRating = Math.round(avgRating * 10) / 10; // Round to 1 decimal
 
     await prisma.cleaner.update({
