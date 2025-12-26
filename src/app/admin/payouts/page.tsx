@@ -93,7 +93,7 @@ export default async function PayoutsPage() {
                         date.getFullYear() === now.getFullYear()
                       );
                     })
-                    .reduce((sum, b) => sum + b.totalCents, 0)
+                    .reduce((sum, b) => sum + Number(b.totalAmount), 0)
                 )}
               </p>
             </div>
@@ -118,7 +118,7 @@ export default async function PayoutsPage() {
             <div>
               <p className="text-sm text-gray-500">Total Paid</p>
               <p className="text-2xl font-bold">
-                {formatCurrency(batches.reduce((sum, b) => sum + b.totalCents, 0))}
+                {formatCurrency(batches.reduce((sum, b) => sum + Number(b.totalAmount), 0))}
               </p>
             </div>
             <CheckCircle className="h-8 w-8 text-primary" />
@@ -133,7 +133,7 @@ export default async function PayoutsPage() {
               <p className="text-2xl font-bold">
                 {batches.length > 0
                   ? formatCurrency(
-                      batches.reduce((sum, b) => sum + b.totalCents, 0) / batches.length
+                      batches.reduce((sum, b) => sum + Number(b.totalAmount), 0) / batches.length
                     )
                   : '$0.00'}
               </p>
@@ -220,7 +220,7 @@ export default async function PayoutsPage() {
                   <td className="px-6 py-4 text-sm font-medium">{batch.id.substring(0, 8)}</td>
                   <td className="px-6 py-4 text-sm">{formatDate(batch.createdAt)}</td>
                   <td className="px-6 py-4 text-sm font-bold text-green-600">
-                    {formatCurrency(batch.totalCents)}
+                    {formatCurrency(Number(batch.totalAmount))}
                   </td>
                   <td className="px-6 py-4">{getStatusBadge(batch.status)}</td>
                   <td className="px-6 py-4 font-mono text-sm text-xs">
