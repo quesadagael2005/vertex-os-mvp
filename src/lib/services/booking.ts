@@ -407,4 +407,3 @@ export class BookingService {
 
 // Export singleton instance
 export const bookingService = new BookingService();
-

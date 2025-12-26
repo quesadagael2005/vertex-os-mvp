@@ -329,4 +329,3 @@ export class AvailabilityService {
 
 // Export singleton instance
 export const availabilityService = new AvailabilityService();
-

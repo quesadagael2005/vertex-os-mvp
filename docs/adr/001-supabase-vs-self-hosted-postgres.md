@@ -38,3 +38,4 @@ We will use **Supabase** as our backend platform.
 3. **AWS RDS + Cognito** - More expensive, more complex
 
 
+

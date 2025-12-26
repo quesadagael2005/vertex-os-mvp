@@ -357,3 +357,4 @@ npx shadcn-ui@latest add button card table
 Ready to integrate the template and start building! 🚀
 
 
+

@@ -169,4 +169,3 @@ export class SettingsService {
 
 // Export singleton instance
 export const settingsService = new SettingsService();
-

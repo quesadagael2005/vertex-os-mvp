@@ -338,3 +338,4 @@ const jobs = await prisma.job.findMany({
 *Built with ❤️ by Claude*
 
 
+

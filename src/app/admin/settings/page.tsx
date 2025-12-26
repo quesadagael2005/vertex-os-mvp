@@ -190,4 +190,3 @@ export default async function SettingsPage() {
     </div>
   );
 }
-

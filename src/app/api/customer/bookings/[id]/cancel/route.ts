@@ -50,4 +50,3 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return errorResponse('Failed to cancel booking', 500);
   }
 }
-

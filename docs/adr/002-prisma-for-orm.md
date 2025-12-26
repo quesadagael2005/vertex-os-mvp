@@ -42,3 +42,4 @@ const subscription = supabase
 3. **TypeORM** - Decorator-based approach less clean than Prisma
 
 
+

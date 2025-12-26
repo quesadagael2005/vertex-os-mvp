@@ -49,4 +49,3 @@ export function validatePassword(password: string): {
     errors,
   };
 }
-

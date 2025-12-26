@@ -20,4 +20,3 @@ export const supabaseAdmin = createClient(supabaseUrl, process.env.SUPABASE_SERV
     persistSession: false,
   },
 });
-
