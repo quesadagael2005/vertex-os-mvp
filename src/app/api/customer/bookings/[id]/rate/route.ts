@@ -11,8 +11,9 @@ import {
   notFoundResponse,
 } from '@/lib/auth/middleware';
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const user = await requireRole(request, ['member']);
     const body = await request.json();
     const { rating, review } = body;
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // Get job to verify ownership
-    const job = await bookingService.getJob(params.id);
+    const job = await bookingService.getJob(id);
 
     if (!job) {
       return notFoundResponse('Booking not found');
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // Rate job
-    await bookingService.rateJob(params.id, rating, review);
+    await bookingService.rateJob(id, rating, review);
 
     return jsonResponse({
       message: 'Rating submitted successfully',

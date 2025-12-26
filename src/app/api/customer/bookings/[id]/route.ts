@@ -11,10 +11,11 @@ import {
   notFoundResponse,
 } from '@/lib/auth/middleware';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const user = await requireRole(request, ['member']);
-    const job = await bookingService.getJob(params.id);
+    const job = await bookingService.getJob(id);
 
     if (!job) {
       return notFoundResponse('Booking not found');
