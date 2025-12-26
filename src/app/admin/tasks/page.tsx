@@ -106,15 +106,10 @@ export default async function TasksPage() {
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium">{task.baseEffortMinutes} min</span>
+                        <span className="font-medium">{task.timeMinutes} min</span>
                         <span className="text-gray-500">base effort</span>
                       </div>
 
-                      {task.effortMultiplier !== 1 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {task.effortMultiplier}x multiplier
-                        </Badge>
-                      )}
                     </div>
                   </div>
 
