@@ -73,7 +73,7 @@ export class AvailabilityService {
     date: Date,
     startTime: string,
     durationMinutes: number,
-    dayOfWeek?: string
+    dayOfWeek?: number
   ): Promise<AvailableCleanerResult> {
     const day = dayOfWeek || this.getDayOfWeek(date);
 
@@ -107,12 +107,13 @@ export class AvailabilityService {
     // Check 3: Get schedule for this day
     const schedule = cleaner.schedules?.find((s) => s.dayOfWeek === day);
 
-    if (!schedule || !schedule.isAvailable) {
+    if (!schedule) {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       return {
         cleaner,
-        schedule: schedule || null,
+        schedule: null,
         isAvailable: false,
-        reason: `Cleaner does not work on ${day}`,
+        reason: `Cleaner does not work on ${days[day]}`,
       };
     }
 
@@ -310,9 +311,8 @@ export class AvailabilityService {
   /**
    * Helper: Get day of week from date
    */
-  private getDayOfWeek(date: Date): string {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return days[date.getDay()];
+  private getDayOfWeek(date: Date): number {
+    return date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
   }
 
   /**
