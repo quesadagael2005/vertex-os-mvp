@@ -224,7 +224,7 @@ export default async function PayoutsPage() {
                   </td>
                   <td className="px-6 py-4">{getStatusBadge(batch.status)}</td>
                   <td className="px-6 py-4 font-mono text-sm text-xs">
-                    {batch.stripeTransferId || '-'}
+                    {batch.errorMessage || '-'}
                   </td>
                 </tr>
               ))}
