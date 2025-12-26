@@ -48,12 +48,14 @@ export default async function CleanersPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'ACTIVE':
         return <Badge variant="success">Active</Badge>;
-      case 'pending_approval':
+      case 'PENDING':
         return <Badge className="bg-yellow-500 hover:bg-yellow-600">Pending</Badge>;
-      case 'suspended':
+      case 'SUSPENDED':
         return <Badge variant="destructive">Suspended</Badge>;
+      case 'INACTIVE':
+        return <Badge variant="outline">Inactive</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -81,13 +83,13 @@ export default async function CleanersPage() {
         <Card className="p-4">
           <p className="text-sm text-gray-500">Active</p>
           <p className="text-2xl font-bold text-green-600">
-            {cleaners.filter((c) => c.status === 'active').length}
+            {cleaners.filter((c) => c.status === 'ACTIVE').length}
           </p>
         </Card>
         <Card className="p-4">
           <p className="text-sm text-gray-500">Pending Approval</p>
           <p className="text-2xl font-bold text-yellow-600">
-            {cleaners.filter((c) => c.status === 'pending_approval').length}
+            {cleaners.filter((c) => c.status === 'PENDING').length}
           </p>
         </Card>
         <Card className="p-4">
