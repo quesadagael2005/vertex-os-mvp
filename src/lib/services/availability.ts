@@ -90,7 +90,7 @@ export class AvailabilityService {
     // Check 2: Is this date blocked?
     if (cleaner.blockedDates) {
       const isBlocked = cleaner.blockedDates.some((blocked) => {
-        const blockedDate = new Date(blocked.date);
+        const blockedDate = new Date(blocked.blockedDate);
         return this.isSameDay(blockedDate, date);
       });
 
@@ -231,7 +231,7 @@ export class AvailabilityService {
 
     // Check if date is blocked
     const isBlocked = cleaner.blockedDates.some((blocked) =>
-      this.isSameDay(new Date(blocked.date), date)
+      this.isSameDay(new Date(blocked.blockedDate), date)
     );
 
     if (isBlocked || !cleaner.schedules[0]?.isAvailable) {
