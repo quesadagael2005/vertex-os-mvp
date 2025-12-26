@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { prisma } from '@/lib/db/client';
 import { formatDate } from '@/lib/utils';
-import { Clock, Eye, Lock, CheckCircle } from 'lucide-react';
+import { Clock, Lock, CheckCircle } from 'lucide-react';
 
 export default async function ApplicationsPage() {
   // Fetch applications
@@ -16,15 +16,11 @@ export default async function ApplicationsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'approved':
+      case 'APPROVED':
         return <Badge variant="success">✓ Approved</Badge>;
-      case 'pending_review':
+      case 'PENDING':
         return <Badge className="bg-yellow-500 hover:bg-yellow-600">⏳ Pending</Badge>;
-      case 'in_review':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">🔍 Review</Badge>;
-      case 'background_check':
-        return <Badge className="bg-purple-500 hover:bg-purple-600">🔐 BG Check</Badge>;
-      case 'rejected':
+      case 'REJECTED':
         return <Badge variant="destructive">❌ Rejected</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
@@ -32,10 +28,9 @@ export default async function ApplicationsPage() {
   };
 
   const statusCounts = {
-    pending: applications.filter((a) => a.status === 'pending_review').length,
-    review: applications.filter((a) => a.status === 'in_review').length,
-    bgCheck: applications.filter((a) => a.status === 'background_check').length,
-    approved: applications.filter((a) => a.status === 'approved').length,
+    pending: applications.filter((a) => a.status === 'PENDING').length,
+    approved: applications.filter((a) => a.status === 'APPROVED').length,
+    rejected: applications.filter((a) => a.status === 'REJECTED').length,
   };
 
   return (
@@ -47,34 +42,14 @@ export default async function ApplicationsPage() {
       </div>
 
       {/* Pipeline Overview */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-l-4 border-l-yellow-500 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Pending Review</p>
+              <p className="text-sm text-gray-500">Pending</p>
               <p className="text-3xl font-bold">{statusCounts.pending}</p>
             </div>
             <Clock className="h-8 w-8 text-yellow-500" />
-          </div>
-        </Card>
-
-        <Card className="border-l-4 border-l-blue-500 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">In Review</p>
-              <p className="text-3xl font-bold">{statusCounts.review}</p>
-            </div>
-            <Eye className="h-8 w-8 text-blue-500" />
-          </div>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-500 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Background Check</p>
-              <p className="text-3xl font-bold">{statusCounts.bgCheck}</p>
-            </div>
-            <Lock className="h-8 w-8 text-purple-500" />
           </div>
         </Card>
 
@@ -87,16 +62,24 @@ export default async function ApplicationsPage() {
             <CheckCircle className="h-8 w-8 text-green-500" />
           </div>
         </Card>
+
+        <Card className="border-l-4 border-l-red-500 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Rejected</p>
+              <p className="text-3xl font-bold">{statusCounts.rejected}</p>
+            </div>
+            <Lock className="h-8 w-8 text-red-500" />
+          </div>
+        </Card>
       </div>
 
       {/* Filters */}
       <Card className="p-4">
         <div className="flex gap-4">
           <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-            <option>All Stages</option>
-            <option>Pending Review</option>
-            <option>In Review</option>
-            <option>Background Check</option>
+            <option>All Statuses</option>
+            <option>Pending</option>
             <option>Approved</option>
             <option>Rejected</option>
           </select>
@@ -159,12 +142,7 @@ export default async function ApplicationsPage() {
                   <td className="px-6 py-4">{getStatusBadge(app.status)}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
-                      {app.status === 'pending_review' && (
-                        <Button size="sm" variant="outline">
-                          Review
-                        </Button>
-                      )}
-                      {app.status === 'in_review' && (
+                      {app.status === 'PENDING' && (
                         <>
                           <Button size="sm" variant="default">
                             ✓ Approve
@@ -174,12 +152,7 @@ export default async function ApplicationsPage() {
                           </Button>
                         </>
                       )}
-                      {app.status === 'background_check' && (
-                        <Button size="sm" variant="outline">
-                          View Check
-                        </Button>
-                      )}
-                      {(app.status === 'approved' || app.status === 'rejected') && (
+                      {(app.status === 'APPROVED' || app.status === 'REJECTED') && (
                         <Button size="sm" variant="ghost">
                           View
                         </Button>
