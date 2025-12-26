@@ -124,10 +124,10 @@ export class MetricsService {
     });
 
     const totalBookings = jobs.length;
-    const completedBookings = jobs.filter((j) => j.status === 'completed').length;
-    const cancelledBookings = jobs.filter((j) => j.status === 'cancelled').length;
-    const inProgressBookings = jobs.filter((j) => j.status === 'in_progress').length;
-    const scheduledBookings = jobs.filter((j) => j.status === 'scheduled').length;
+    const completedBookings = jobs.filter((j) => j.status === 'COMPLETED').length;
+    const cancelledBookings = jobs.filter((j) => j.status === 'CANCELLED').length;
+    const inProgressBookings = jobs.filter((j) => j.status === 'IN_PROGRESS').length;
+    const scheduledBookings = jobs.filter((j) => j.status === 'SCHEDULED').length;
 
     const completionRate =
       totalBookings > 0 ? Math.round((completedBookings / totalBookings) * 100) : 0;

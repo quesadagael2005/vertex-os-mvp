@@ -169,20 +169,20 @@ export class BookingService {
    */
   async updateJobStatus(
     jobId: string,
-    status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled',
+    status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
     completedBy?: string
   ): Promise<Job> {
     const data: {
-      status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+      status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
       startedAt?: Date;
       completedAt?: Date;
     } = { status };
 
-    if (status === 'in_progress') {
+    if (status === 'IN_PROGRESS') {
       data.startedAt = new Date();
     }
 
-    if (status === 'completed') {
+    if (status === 'COMPLETED') {
       data.completedAt = new Date();
     }
 
@@ -202,7 +202,7 @@ export class BookingService {
     });
 
     // If completed, update cleaner's completed job count
-    if (status === 'completed') {
+    if (status === 'COMPLETED') {
       await prisma.cleaner.update({
         where: { id: job.cleanerId! },
         data: {
@@ -310,7 +310,7 @@ export class BookingService {
       throw new Error('Job not found');
     }
 
-    if (job.status !== 'completed') {
+    if (job.status !== 'COMPLETED') {
       throw new Error('Can only rate completed jobs');
     }
 
@@ -365,7 +365,7 @@ export class BookingService {
     return await prisma.job.findMany({
       where: {
         memberId,
-        status: { in: ['scheduled', 'in_progress'] },
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         scheduledDate: { gte: new Date() },
       },
       orderBy: { scheduledDate: 'asc' },
@@ -389,7 +389,7 @@ export class BookingService {
     return await prisma.job.findMany({
       where: {
         memberId,
-        status: 'completed',
+        status: 'COMPLETED',
       },
       orderBy: { completedAt: 'desc' },
       take: limit,

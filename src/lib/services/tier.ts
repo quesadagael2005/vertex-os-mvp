@@ -248,7 +248,7 @@ export class TierService {
     const recentJobs = await prisma.job.count({
       where: {
         memberId,
-        status: { in: ['completed', 'scheduled'] },
+        status: { in: ['COMPLETED', 'SCHEDULED'] },
         createdAt: { gte: threeMonthsAgo },
       },
     });
