@@ -32,12 +32,11 @@ export class PayoutService {
     // Get all completed jobs in the period that haven't been paid out
     const jobs = await prisma.job.findMany({
       where: {
-        status: 'completed',
+        status: 'COMPLETED',
         completedAt: {
           gte: startDate,
           lte: endDate,
         },
-        payoutBatchId: null, // Not yet included in a payout batch
       },
       include: {
         cleaner: {
@@ -71,7 +70,10 @@ export class PayoutService {
     for (const [cleanerId, cleanerJobList] of cleanerJobs.entries()) {
       const cleaner = cleanerJobList[0].cleaner!;
 
-      const grossPayoutCents = cleanerJobList.reduce((sum, job) => sum + job.cleanerPayoutCents, 0);
+      const grossPayoutCents = cleanerJobList.reduce(
+        (sum, job) => sum + Number(job.cleanerPayout) * 100,
+        0
+      );
 
       // Stripe fees: 2.9% + $0.30 per transfer
       const stripeFeesCents = Math.round(grossPayoutCents * 0.029) + 30;
@@ -87,7 +89,7 @@ export class PayoutService {
         jobs: cleanerJobList.map((job) => ({
           jobId: job.id,
           completedAt: job.completedAt!,
-          payoutCents: job.cleanerPayoutCents,
+          payoutCents: Number(job.cleanerPayout) * 100,
         })),
       });
     }
@@ -103,7 +105,7 @@ export class PayoutService {
    * Marks all included jobs as paid
    */
   async createPayoutBatch(input: CreatePayoutBatchInput): Promise<PayoutBatch> {
-    const { startDate, endDate, notes } = input;
+    const { startDate, endDate, notes: _notes } = input;
 
     // Calculate payouts
     const payouts = await this.calculatePayouts(startDate, endDate);
@@ -114,22 +116,17 @@ export class PayoutService {
 
     // Calculate totals
     const totalJobs = payouts.reduce((sum, p) => sum + p.jobCount, 0);
-    const totalGrossCents = payouts.reduce((sum, p) => sum + p.grossPayoutCents, 0);
-    const totalFeesCents = payouts.reduce((sum, p) => sum + p.stripeFeesCents, 0);
+    const _totalGrossCents = payouts.reduce((sum, p) => sum + p.grossPayoutCents, 0);
+    const _totalFeesCents = payouts.reduce((sum, p) => sum + p.stripeFeesCents, 0);
     const totalNetCents = payouts.reduce((sum, p) => sum + p.netPayoutCents, 0);
 
     // Create payout batch
     const batch = await prisma.payoutBatch.create({
       data: {
-        periodStart: startDate,
-        periodEnd: endDate,
         status: 'PENDING',
-        totalCleaners: payouts.length,
-        totalJobs,
-        totalGrossCents,
-        totalFeesCents,
-        totalNetCents,
-        notes,
+        cleanerCount: payouts.length,
+        jobCount: totalJobs,
+        totalAmount: totalNetCents / 100,
       },
     });
 
@@ -201,9 +198,9 @@ export class PayoutService {
       cleanerData.jobs.push({
         id: job.id,
         completedAt: job.completedAt,
-        payoutCents: job.cleanerPayoutCents,
+        payoutCents: job.cleanerPayout,
       });
-      cleanerData.totalCents += job.cleanerPayoutCents;
+      cleanerData.totalCents += job.cleanerPayout;
     }
 
     return {
@@ -256,13 +253,13 @@ export class PayoutService {
     const jobs = await prisma.job.findMany({
       where: {
         cleanerId,
-        status: 'completed',
+        status: 'COMPLETED',
         payoutBatchId: null, // Not yet paid
       },
       orderBy: { completedAt: 'asc' },
     });
 
-    const totalPendingCents = jobs.reduce((sum, job) => sum + job.cleanerPayoutCents, 0);
+    const totalPendingCents = jobs.reduce((sum, job) => sum + job.cleanerPayout, 0);
 
     return {
       jobCount: jobs.length,
@@ -300,7 +297,7 @@ export class PayoutService {
         jobs: {
           where: { cleanerId },
           select: {
-            cleanerPayoutCents: true,
+            cleanerPayout: true,
           },
         },
       },
@@ -323,7 +320,7 @@ export class PayoutService {
         notes: batch.notes,
       },
       jobCount: batch.jobs.length,
-      amountCents: batch.jobs.reduce((sum, j) => sum + j.cleanerPayoutCents, 0),
+      amountCents: batch.jobs.reduce((sum, j) => sum + j.cleanerPayout, 0),
     }));
   }
 

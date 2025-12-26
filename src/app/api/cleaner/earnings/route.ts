@@ -34,3 +34,4 @@ export async function GET(request: NextRequest) {
     return errorResponse('Failed to fetch earnings', 500);
   }
 }
+

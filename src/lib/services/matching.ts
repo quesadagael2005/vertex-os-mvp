@@ -127,7 +127,7 @@ export class MatchingService {
       where: {
         cleanerId,
         status: {
-          in: ['scheduled', 'in_progress'],
+          in: ['SCHEDULED', 'IN_PROGRESS'],
         },
         scheduledDate: {
           gte: fromDate,
@@ -152,15 +152,15 @@ export class MatchingService {
       reasons.push('Customer preferred');
     }
 
-    if (cleaner.rating >= 4.5) {
+    if (Number(cleaner.ratingAverage) >= 4.5) {
       reasons.push('Top rated');
-    } else if (cleaner.rating >= 4.0) {
+    } else if (Number(cleaner.ratingAverage) >= 4.0) {
       reasons.push('Highly rated');
     }
 
-    if (cleaner.completedJobs >= 100) {
+    if (cleaner.jobsCompleted >= 100) {
       reasons.push('Very experienced');
-    } else if (cleaner.completedJobs >= 50) {
+    } else if (cleaner.jobsCompleted >= 50) {
       reasons.push('Experienced');
     }
 
@@ -179,9 +179,11 @@ export class MatchingService {
     const recentJob = await prisma.job.findFirst({
       where: {
         memberId,
-        status: 'completed',
+        status: 'COMPLETED',
         rating: {
-          gte: 4, // Only consider well-rated jobs
+          overallRating: {
+            gte: 4, // Only consider well-rated jobs
+          },
         },
       },
       orderBy: {
