@@ -29,7 +29,7 @@ export class AvailabilityService {
     // Step 1: Get all cleaners who service this zone
     const cleaners = await prisma.cleaner.findMany({
       where: {
-        status: 'active',
+        status: 'ACTIVE',
         zones: {
           some: {
             zoneId,
@@ -78,7 +78,7 @@ export class AvailabilityService {
     const day = dayOfWeek || this.getDayOfWeek(date);
 
     // Check 1: Is cleaner active?
-    if (cleaner.status !== 'active') {
+    if (cleaner.status !== 'ACTIVE') {
       return {
         cleaner,
         schedule: null,
@@ -173,7 +173,7 @@ export class AvailabilityService {
       where: {
         cleanerId,
         status: {
-          in: ['scheduled', 'in_progress'],
+          in: ['SCHEDULED', 'IN_PROGRESS'],
         },
         scheduledDate: {
           gte: new Date(date.setHours(0, 0, 0, 0)),
@@ -225,7 +225,7 @@ export class AvailabilityService {
       },
     });
 
-    if (!cleaner || cleaner.status !== 'active') {
+    if (!cleaner || cleaner.status !== 'ACTIVE') {
       return [];
     }
 
@@ -246,7 +246,7 @@ export class AvailabilityService {
     const jobs = await prisma.job.findMany({
       where: {
         cleanerId,
-        status: { in: ['scheduled', 'in_progress'] },
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         scheduledDate: {
           gte: new Date(date.setHours(0, 0, 0, 0)),
           lt: new Date(date.setHours(23, 59, 59, 999)),

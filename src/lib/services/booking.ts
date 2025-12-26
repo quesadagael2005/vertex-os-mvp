@@ -80,7 +80,7 @@ export class BookingService {
         memberId: input.memberId,
         cleanerId: match.cleaner.id,
         zoneId: input.zoneId,
-        status: 'scheduled',
+        status: 'SCHEDULED',
         address: input.address,
         scheduledDate: input.scheduledDate,
         scheduledTime: input.scheduledTime,
