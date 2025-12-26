@@ -3,6 +3,17 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   
+  // ESLint configuration
+  eslint: {
+    // Don't fail build on ESLint warnings
+    ignoreDuringBuilds: false,
+  },
+  
+  typescript: {
+    // Don't fail build on TypeScript errors (if any)
+    ignoreBuildErrors: false,
+  },
+  
   // Security headers
   async headers() {
     return [
