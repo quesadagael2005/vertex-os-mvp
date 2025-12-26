@@ -123,7 +123,7 @@ export class PayoutService {
       data: {
         periodStart: startDate,
         periodEnd: endDate,
-        status: 'pending',
+        status: 'PENDING',
         totalCleaners: payouts.length,
         totalJobs,
         totalGrossCents,
