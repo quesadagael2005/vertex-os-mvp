@@ -130,9 +130,7 @@ export default async function ApplicationsPage() {
                         <p className="font-medium">
                           {app.firstName} {app.lastName}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {app.addressZip}
-                        </p>
+                        <p className="text-xs text-gray-500">{app.addressZip}</p>
                       </div>
                     </div>
                   </td>
