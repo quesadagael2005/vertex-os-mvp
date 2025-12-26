@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValid = await comparePassword(password, member.password);
+    const isValid = await comparePassword(password, member.passwordHash);
 
     if (!isValid) {
       return errorResponse('Invalid email or password', 401);
