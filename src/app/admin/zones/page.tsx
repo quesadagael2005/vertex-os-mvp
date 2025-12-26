@@ -135,7 +135,7 @@ export default async function ZonesPage() {
                           <span className="flex-1">
                             {cz.cleaner.firstName} {cz.cleaner.lastName}
                           </span>
-                          {cz.cleaner.status === 'active' ? (
+                          {cz.cleaner.status === 'ACTIVE' ? (
                             <span className="h-2 w-2 rounded-full bg-green-500"></span>
                           ) : (
                             <span className="h-2 w-2 rounded-full bg-gray-300"></span>
