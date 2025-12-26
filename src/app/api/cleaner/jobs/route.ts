@@ -33,19 +33,27 @@ export async function GET(request: NextRequest) {
 
     const jobs = await prisma.job.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        status: true,
+        scheduledDate: true,
+        scheduledTime: true,
+        estimatedDuration: true,
+        addressFull: true,
+        addressZip: true,
+        subtotal: true,
+        totalPrice: true,
+        cleanerPayout: true,
         member: {
           select: {
             email: true,
             phone: true,
           },
         },
-        zone: true,
-        checklist: {
-          include: {
-            items: {
-              orderBy: { order: 'asc' },
-            },
+        cleaner: {
+          select: {
+            firstName: true,
+            lastName: true,
           },
         },
       },
