@@ -45,9 +45,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return unauthorizedResponse(error.message);
     }
     console.error('Error rating booking:', error);
-    return errorResponse(
-      error instanceof Error ? error.message : 'Failed to submit rating',
-      500
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to submit rating', 500);
   }
 }
