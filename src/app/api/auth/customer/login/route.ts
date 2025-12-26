@@ -44,8 +44,6 @@ export async function POST(request: NextRequest) {
       user: {
         id: member.id,
         email: member.email,
-        firstName: member.firstName,
-        lastName: member.lastName,
         tier: member.tier,
       },
       token: tokenData.token,
