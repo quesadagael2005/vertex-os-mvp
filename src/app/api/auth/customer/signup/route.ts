@@ -10,11 +10,11 @@ import { jsonResponse, errorResponse } from '@/lib/auth/middleware';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, firstName, lastName, phone } = body;
+    const { email, password, phone, addressFull, addressZip } = body;
 
     // Validation
-    if (!email || !password || !firstName || !lastName) {
-      return errorResponse('Email, password, first name, and last name are required');
+    if (!email || !password || !addressFull || !addressZip) {
+      return errorResponse('Email, password, address, and zip code are required');
     }
 
     // Validate email format
@@ -41,20 +41,15 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create Supabase auth user (placeholder - would integrate with Supabase Auth)
-    // For now, we'll create a member with a generated auth ID
-    const authId = `auth_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
     // Create member
     const member = await prisma.member.create({
       data: {
-        authId,
         email,
-        password: hashedPassword,
-        firstName,
-        lastName,
+        passwordHash: hashedPassword,
         phone: phone || null,
-        tier: 'free',
+        addressFull,
+        addressZip,
+        tier: 'FREE',
       },
     });
 
@@ -70,8 +65,6 @@ export async function POST(request: NextRequest) {
         user: {
           id: member.id,
           email: member.email,
-          firstName: member.firstName,
-          lastName: member.lastName,
           tier: member.tier,
         },
         token: tokenData.token,
