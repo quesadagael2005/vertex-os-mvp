@@ -67,7 +67,7 @@ export class AvailabilityService {
    */
   async checkCleanerAvailability(
     cleaner: Cleaner & {
-      schedule?: CleanerSchedule[];
+      schedules?: CleanerSchedule[];
       blockedDates?: CleanerBlockedDate[];
     },
     date: Date,
@@ -105,7 +105,8 @@ export class AvailabilityService {
     }
 
     // Check 3: Get schedule for this day
-    const schedule = cleaner.schedules?.find((s) => s.dayOfWeek === day);
+    const dayNum = parseInt(day);
+    const schedule = cleaner.schedules?.find((s) => s.dayOfWeek === dayNum);
 
     if (!schedule) {
       return {
@@ -173,7 +174,7 @@ export class AvailabilityService {
       where: {
         cleanerId,
         status: {
-          in: ['scheduled', 'in_progress'],
+          in: ['SCHEDULED', 'IN_PROGRESS'],
         },
         scheduledDate: {
           gte: new Date(date.setHours(0, 0, 0, 0)),
@@ -182,16 +183,16 @@ export class AvailabilityService {
       },
       select: {
         scheduledTime: true,
-        estimatedDurationMinutes: true,
+        estimatedDuration: true,
       },
     });
 
     // Check for time conflicts
     for (const job of jobs) {
-      if (!job.scheduledTime || !job.estimatedDurationMinutes) continue;
+      if (!job.scheduledTime || !job.estimatedDuration) continue;
 
       const jobStart = this.timeToMinutes(job.scheduledTime);
-      const jobEnd = jobStart + job.estimatedDurationMinutes;
+      const jobEnd = jobStart + job.estimatedDuration;
 
       // Check if times overlap
       if (
@@ -215,12 +216,13 @@ export class AvailabilityService {
     durationMinutes: number
   ): Promise<string[]> {
     const dayOfWeek = this.getDayOfWeek(date);
+    const dayNum = parseInt(dayOfWeek);
 
     // Get cleaner with schedule and blocked dates
     const cleaner = await prisma.cleaner.findUnique({
       where: { id: cleanerId },
       include: {
-        schedule: { where: { dayOfWeek } },
+        schedules: { where: { dayOfWeek: dayNum } },
         blockedDates: true,
       },
     });
@@ -231,14 +233,14 @@ export class AvailabilityService {
 
     // Check if date is blocked
     const isBlocked = cleaner.blockedDates.some((blocked) =>
-      this.isSameDay(new Date(blocked.date), date)
+      this.isSameDay(new Date(blocked.blockedDate), date)
     );
 
-    if (isBlocked || !cleaner.schedule[0]?.isAvailable) {
+    if (isBlocked || !cleaner.schedules[0]) {
       return [];
     }
 
-    const schedule = cleaner.schedule[0];
+    const schedule = cleaner.schedules[0];
     const workStart = this.timeToMinutes(schedule.startTime);
     const workEnd = this.timeToMinutes(schedule.endTime);
 
@@ -246,7 +248,7 @@ export class AvailabilityService {
     const jobs = await prisma.job.findMany({
       where: {
         cleanerId,
-        status: { in: ['scheduled', 'in_progress'] },
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         scheduledDate: {
           gte: new Date(date.setHours(0, 0, 0, 0)),
           lt: new Date(date.setHours(23, 59, 59, 999)),
@@ -254,17 +256,17 @@ export class AvailabilityService {
       },
       select: {
         scheduledTime: true,
-        estimatedDurationMinutes: true,
+        estimatedDuration: true,
       },
       orderBy: { scheduledTime: 'asc' },
     });
 
     // Build list of busy periods
     const busyPeriods: Array<{ start: number; end: number }> = jobs
-      .filter((job) => job.scheduledTime && job.estimatedDurationMinutes)
+      .filter((job) => job.scheduledTime && job.estimatedDuration)
       .map((job) => ({
         start: this.timeToMinutes(job.scheduledTime!),
-        end: this.timeToMinutes(job.scheduledTime!) + job.estimatedDurationMinutes!,
+        end: this.timeToMinutes(job.scheduledTime!) + job.estimatedDuration!,
       }));
 
     // Find available slots (every 30 minutes)
