@@ -24,12 +24,12 @@ export class SettingsService {
    * Get all settings in a category
    * Returns object with key-value pairs
    */
-  async getCategory(category: string): Promise<Record<string, any>> {
+  async getCategory(category: string): Promise<Record<string, string | number | boolean | object>> {
     const settings = await prisma.setting.findMany({
       where: { category },
     });
 
-    const result: Record<string, any> = {};
+    const result: Record<string, string | number | boolean | object> = {};
 
     for (const setting of settings) {
       result[setting.key] = this.parseValue(setting.value, setting.valueType);
@@ -41,10 +41,10 @@ export class SettingsService {
   /**
    * Get all settings grouped by category
    */
-  async getAll(): Promise<Record<string, Record<string, any>>> {
+  async getAll(): Promise<Record<string, Record<string, string | number | boolean | object>>> {
     const settings = await prisma.setting.findMany();
 
-    const result: Record<string, Record<string, any>> = {};
+    const result: Record<string, Record<string, string | number | boolean | object>> = {};
 
     for (const setting of settings) {
       if (!result[setting.category]) {
@@ -169,3 +169,4 @@ export class SettingsService {
 
 // Export singleton instance
 export const settingsService = new SettingsService();
+

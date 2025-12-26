@@ -41,3 +41,4 @@ const subscription = supabase
 2. **Drizzle ORM** - Less mature ecosystem
 3. **TypeORM** - Decorator-based approach less clean than Prisma
 
+

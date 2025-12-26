@@ -62,3 +62,4 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return errorResponse(error.message || 'Failed to reschedule booking', 500);
   }
 }
+

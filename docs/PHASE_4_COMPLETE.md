@@ -337,3 +337,4 @@ const jobs = await prisma.job.findMany({
 *Last Updated: December 24, 2025*
 *Built with ❤️ by Claude*
 
+

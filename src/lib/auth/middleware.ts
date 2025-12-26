@@ -47,7 +47,7 @@ export async function requireRole(
 /**
  * API response helpers
  */
-export function jsonResponse(data: any, status: number = 200) {
+export function jsonResponse(data: unknown, status: number = 200) {
   return Response.json(data, { status });
 }
 
@@ -70,3 +70,4 @@ export function notFoundResponse(message: string = 'Not found') {
 export function serverErrorResponse(message: string = 'Internal server error') {
   return Response.json({ error: message }, { status: 500 });
 }
+

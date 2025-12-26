@@ -76,3 +76,4 @@ export async function PUT(request: NextRequest) {
     return errorResponse('Failed to update profile', 500);
   }
 }
+

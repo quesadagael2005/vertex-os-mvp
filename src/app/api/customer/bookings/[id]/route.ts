@@ -34,3 +34,4 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return errorResponse('Failed to fetch booking', 500);
   }
 }
+

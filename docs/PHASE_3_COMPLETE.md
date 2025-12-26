@@ -374,3 +374,4 @@ curl http://localhost:3000/api/customer/profile \
 
 **All services from Phase 2 are now accessible via secure REST APIs!** 🚀
 
+

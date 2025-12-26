@@ -195,3 +195,4 @@ export async function PATCH(
 - **TierService**: Uses tier settings for feature checks
 - **BookingService**: Uses general and threshold settings
 
+

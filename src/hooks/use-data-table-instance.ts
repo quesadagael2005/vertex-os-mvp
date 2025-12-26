@@ -52,7 +52,12 @@ export function useDataTableInstance<TData, TValue>({
       pagination,
     },
     enableRowSelection,
-    getRowId: getRowId ?? ((row) => (row as any).id.toString()),
+    getRowId:
+      getRowId ??
+      ((row: TData) => {
+        const rowWithId = row as { id: string | number };
+        return rowWithId.id.toString();
+      }),
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,

@@ -47,3 +47,4 @@ prisma/migrations/**/migration.sql
 .vercel
 .turbo
 
+

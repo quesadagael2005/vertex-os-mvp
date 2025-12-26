@@ -25,10 +25,10 @@ function DragHandle({ id }: { id: number }) {
   );
 }
 
-export const dragColumn: ColumnDef<any> = {
+export const dragColumn = <TData extends { id: number }>(): ColumnDef<TData> => ({
   id: 'drag',
   header: () => null,
   cell: ({ row }) => <DragHandle id={row.original.id} />,
   enableSorting: false,
   enableHiding: false,
-};
+});

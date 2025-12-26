@@ -37,3 +37,4 @@ We will use **Supabase** as our backend platform.
 2. **Firebase** - NoSQL doesn't fit our relational needs
 3. **AWS RDS + Cognito** - More expensive, more complex
 
+

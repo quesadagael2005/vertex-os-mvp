@@ -177,7 +177,14 @@ export class PayoutService {
     });
 
     // Group by cleaner
-    const cleanerPayouts = new Map<string, any>();
+    const cleanerPayouts = new Map<
+      string,
+      {
+        cleaner: { id: string; firstName: string; lastName: string; email: string };
+        jobs: Array<{ id: string; completedAt: Date | null; payoutCents: number }>;
+        totalCents: number;
+      }
+    >();
 
     for (const job of jobs) {
       if (!job.cleanerId) continue;
@@ -362,3 +369,4 @@ export class PayoutService {
 
 // Export singleton instance
 export const payoutService = new PayoutService();
+

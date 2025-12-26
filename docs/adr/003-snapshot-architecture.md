@@ -189,3 +189,4 @@ If we need "bulk update all future jobs" feature:
 - ADR 004: Job Status State Machine
 - ADR 005: Pricing Calculation Engine
 
+

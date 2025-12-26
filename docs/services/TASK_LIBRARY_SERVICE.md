@@ -300,3 +300,4 @@ CREATE INDEX idx_tasks_active ON tasks(is_active);
 - **PricingService**: Prices jobs based on task effort
 - **BookingService**: References tasks in job checklists
 
+

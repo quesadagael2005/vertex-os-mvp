@@ -48,9 +48,6 @@ export async function PATCH(request: NextRequest) {
       return unauthorizedResponse(error.message);
     }
     console.error('Error updating setting:', error);
-    return errorResponse(
-      error instanceof Error ? error.message : 'Failed to update setting',
-      500
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update setting', 500);
   }
 }

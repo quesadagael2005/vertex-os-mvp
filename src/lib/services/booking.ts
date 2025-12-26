@@ -172,7 +172,11 @@ export class BookingService {
     status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled',
     completedBy?: string
   ): Promise<Job> {
-    const data: any = { status };
+    const data: {
+      status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+      startedAt?: Date;
+      completedAt?: Date;
+    } = { status };
 
     if (status === 'in_progress') {
       data.startedAt = new Date();
@@ -403,3 +407,4 @@ export class BookingService {
 
 // Export singleton instance
 export const bookingService = new BookingService();
+

@@ -68,7 +68,7 @@ export class PricingService {
 
     // Calculate base price
     const effortCostCents = input.effortMinutes * perMinute;
-    let subtotalCents = baseFee + effortCostCents;
+    const subtotalCents = baseFee + effortCostCents;
 
     // Apply modifiers (add to price)
     const modifiers: PricingBreakdown['modifiers'] = [];

@@ -25,7 +25,7 @@ export default async function SettingsPage() {
 
   const categories = Object.keys(settingsByCategory).sort();
 
-  const categoryIcons: Record<string, any> = {
+  const categoryIcons: Record<string, typeof SettingsIcon> = {
     pricing: DollarSign,
     booking: Clock,
     operations: SettingsIcon,
@@ -190,3 +190,4 @@ export default async function SettingsPage() {
     </div>
   );
 }
+

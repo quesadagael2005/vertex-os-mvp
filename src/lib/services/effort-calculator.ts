@@ -229,3 +229,4 @@ export class EffortCalculatorService {
 
 // Export singleton instance
 export const effortCalculatorService = new EffortCalculatorService();
+
