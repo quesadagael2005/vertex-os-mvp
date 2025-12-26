@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         email: true,
-        firstName: true,
-        lastName: true,
         phone: true,
         tier: true,
+        addressFull: true,
+        addressZip: true,
         stripeCustomerId: true,
         createdAt: true,
       },
@@ -47,23 +47,23 @@ export async function PUT(request: NextRequest) {
   try {
     const user = await requireRole(request, ['member']);
     const body = await request.json();
-    const { firstName, lastName, phone } = body;
+    const { phone, addressFull, addressZip } = body;
 
     // Update member
     const member = await prisma.member.update({
       where: { id: user.userId },
       data: {
-        firstName: firstName || undefined,
-        lastName: lastName || undefined,
         phone: phone || undefined,
+        addressFull: addressFull || undefined,
+        addressZip: addressZip || undefined,
       },
       select: {
         id: true,
         email: true,
-        firstName: true,
-        lastName: true,
         phone: true,
         tier: true,
+        addressFull: true,
+        addressZip: true,
       },
     });
 
